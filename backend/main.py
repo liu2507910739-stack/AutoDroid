@@ -276,7 +276,7 @@ def _register_http_routers(
 
 
 _register_http_routers(api_router, include_in_schema=True, ai_prefix="/ai", reports_prefix="/reports")
-_register_http_routers(app, include_in_schema=False, ai_prefix=None, include_settings_alias=False, reports_prefix="")
+_register_http_routers(app, include_in_schema=False, ai_prefix=None, include_settings_alias=True, reports_prefix="/reports")
 
 api_router.include_router(
     stream_rest_router,

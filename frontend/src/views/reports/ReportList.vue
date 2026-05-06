@@ -278,10 +278,8 @@ watch(
 )
 
 onMounted(() => {
-    if (!route.meta?.keepAlive) {
-        refreshReportCenter()
-        activatePage()
-    }
+    refreshReportCenter()
+    activatePage()
 })
 
 onActivated(() => {
