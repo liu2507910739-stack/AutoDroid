@@ -206,7 +206,7 @@ class CrossPlatformRunnerTests(unittest.TestCase):
         result = self.runner.run_step(
             {
                 "action": "input",
-                "args": {"text": "{{ NAME }}"},
+                "args": {"text": "{{NAME}}"},
                 "platform_overrides": {
                     "android": {"selector": "com.demo:id/input", "by": "id"},
                 },
@@ -537,7 +537,7 @@ class CrossPlatformRunnerTests(unittest.TestCase):
                 },
                 {
                     "action": "input",
-                    "args": {"text": "{{ PRICE }}"},
+                    "args": {"text": "{{PRICE}}"},
                     "platform_overrides": {
                         self.platform: {"selector": "com.demo:id/price", "by": "id"},
                     },

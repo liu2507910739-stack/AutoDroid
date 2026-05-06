@@ -117,7 +117,7 @@ class AndroidDriverInputTests(unittest.TestCase):
         driver._device.shell.side_effect = lambda *args, **kwargs: None
 
         with self.assertRaises(RuntimeError) as context:
-            AndroidDriver.input(driver, selector="请输入手机号码", by="text", text="{{ NAME }}")
+            AndroidDriver.input(driver, selector="请输入手机号码", by="text", text="{{NAME}}")
 
         self.assertIn("Android.input 执行失败", str(context.exception))
         self.assertIn("verify-failed", str(context.exception))

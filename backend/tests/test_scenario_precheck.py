@@ -142,7 +142,7 @@ class ScenarioPrecheckTests(unittest.TestCase):
             action="input",
             execute_on=["android"],
             platform_overrides={"android": {"selector": "请输入手机号码", "by": "text"}},
-            args={"text": "{{ NAME }}"},
+            args={"text": "{{NAME}}"},
         )
 
         result = precheck_scenario_execution(
@@ -175,7 +175,7 @@ class ScenarioPrecheckTests(unittest.TestCase):
             action="input",
             execute_on=["android"],
             platform_overrides={"android": {"selector": "com.demo:id/price", "by": "id"}},
-            args={"text": "{{ PRICE }}"},
+            args={"text": "{{PRICE}}"},
         )
 
         result = precheck_scenario_execution(
@@ -210,7 +210,7 @@ class ScenarioPrecheckTests(unittest.TestCase):
             action="assert_text",
             execute_on=["android"],
             platform_overrides={"android": {"selector": "com.demo:id/price", "by": "id"}},
-            args={"expected_text": "{{ PRICE }}"},
+            args={"expected_text": "{{PRICE}}"},
         )
 
         result = precheck_scenario_execution(
@@ -247,7 +247,7 @@ class ScenarioPrecheckTests(unittest.TestCase):
             action="assert_text",
             execute_on=["android"],
             platform_overrides={},
-            args={"expected_text": "{{ PRICE }}"},
+            args={"expected_text": "{{PRICE}}"},
         )
 
         result = precheck_scenario_execution(

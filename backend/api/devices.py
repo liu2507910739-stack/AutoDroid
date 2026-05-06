@@ -1058,6 +1058,25 @@ def rename_device(
     return device
 
 
+@router.delete("/{serial}")
+def delete_device(
+    serial: str,
+    session: Session = Depends(get_session),
+    current_user=Depends(get_current_user),
+):
+    """删除离线设备信息。"""
+    device = session.exec(select(Device).where(Device.serial == serial)).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    if str(device.status or "").strip().upper() != "OFFLINE":
+        raise HTTPException(status_code=400, detail="仅离线设备支持删除")
+
+    session.delete(device)
+    session.commit()
+    return {"message": f"设备 {serial} 已删除"}
+
+
 @router.post("/{serial}/wda/check")
 def check_ios_wda(serial: str, session: Session = Depends(get_session)):
     """

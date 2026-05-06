@@ -314,10 +314,10 @@ onActivated(() => {
                     />
                     
                     <el-radio-group v-model="filterStatus" class="status-filter" @change="handleSearch">
-                        <el-radio-button label="all">全部</el-radio-button>
-                        <el-radio-button label="success">成功</el-radio-button>
-                        <el-radio-button label="warning">告警</el-radio-button>
-                        <el-radio-button label="failure">失败</el-radio-button>
+                        <el-radio-button value="all">全部</el-radio-button>
+                        <el-radio-button value="success">成功</el-radio-button>
+                        <el-radio-button value="warning">告警</el-radio-button>
+                        <el-radio-button value="failure">失败</el-radio-button>
                     </el-radio-group>
                 </div>
                 

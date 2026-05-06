@@ -103,7 +103,7 @@ class TestRunner:
     测试用例执行器。
     
     通过 uiautomator2 连接 Android 设备，支持：
-    - 变量替换 (${var} → value)
+    - 变量替换 ({{KEY}} → value)
     - 重试机制 (失败后重试3次，间隔1秒)
     - 多种定位策略 (resourceId / text / description / xpath / 图像匹配)
     """
@@ -329,7 +329,7 @@ class TestRunner:
         }
 
     def _substitute_variables(self, text: Optional[str], variables: Dict[str, str]) -> Optional[str]:
-        """将 {{ VAR }} 占位符替换为实际变量值"""
+        """将 {{VAR}} 占位符替换为实际变量值"""
         from backend.utils.variable_render import render_step_data
         if not text:
             return text

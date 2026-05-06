@@ -42,6 +42,27 @@ const CROSS_PLATFORM_ACTIONS = [
     'extract_by_ocr'
 ]
 
+const VARIABLE_PLACEHOLDER_PATTERN = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g
+
+function formatVariablePlaceholder(key) {
+    return `{{${String(key || '').trim()}}}`
+}
+
+function normalizeVariablePlaceholders(value) {
+    if (typeof value === 'string') {
+        return value.replace(VARIABLE_PLACEHOLDER_PATTERN, (_, key) => formatVariablePlaceholder(key))
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => normalizeVariablePlaceholders(item))
+    }
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [key, normalizeVariablePlaceholders(item)])
+        )
+    }
+    return value
+}
+
 function defaultExecuteOnForAction(action) {
     const actionName = String(action || '').trim().toLowerCase()
     if (CROSS_PLATFORM_ACTIONS.includes(actionName)) {
@@ -64,7 +85,7 @@ function normalizeExecuteOn(executeOn) {
 
 function normalizePlatformSelector(rawSelector) {
     if (!rawSelector || typeof rawSelector !== 'object') return null
-    const selector = String(rawSelector.selector || '').trim()
+    const selector = normalizeVariablePlaceholders(String(rawSelector.selector || '').trim())
     const by = String(rawSelector.by || '').trim().toLowerCase()
     if (!selector || !by) return null
     return { selector, by }
@@ -73,6 +94,10 @@ function normalizePlatformSelector(rawSelector) {
 function ensureCrossPlatformFields(step) {
     const normalized = { ...(step || {}) }
     normalized.action = String(normalized.action || '').trim().toLowerCase()
+    normalized.selector = normalizeVariablePlaceholders(normalized.selector)
+    normalized.value = normalizeVariablePlaceholders(normalized.value)
+    normalized.description = normalizeVariablePlaceholders(normalized.description)
+    normalized.options = normalizeVariablePlaceholders(normalized.options)
 
     if (!normalized.uuid) {
         normalized.uuid = createUuid()
@@ -392,6 +417,7 @@ export const useCaseStore = defineStore('case', () => {
 
             currentCase.value = {
                 ...caseData,
+                variables: normalizeVariablePlaceholders(caseData.variables || []),
                 steps: uiSteps
             }
             ElMessage.success('用例已加载')
@@ -406,10 +432,12 @@ export const useCaseStore = defineStore('case', () => {
         loading.value = true
         try {
             const normalizedSteps = (currentCase.value.steps || []).map((step) => ensureCrossPlatformFields(step))
+            const normalizedVariables = normalizeVariablePlaceholders(currentCase.value.variables || [])
             const legacySteps = normalizedSteps.map((step) => uiStepToLegacyStep(step))
 
             const payload = {
                 ...currentCase.value,
+                variables: normalizedVariables,
                 steps: legacySteps
             }
 

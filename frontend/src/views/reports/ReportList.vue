@@ -315,10 +315,10 @@ onUnmounted(() => {
                                 @clear="handleSearch"
                             />
                             <el-radio-group v-model="filterStatus" @change="handleSearch">
-                                <el-radio-button label="all">全部</el-radio-button>
-                                <el-radio-button label="pass">成功</el-radio-button>
-                                <el-radio-button label="warning">告警</el-radio-button>
-                                <el-radio-button label="fail">失败</el-radio-button>
+                                <el-radio-button value="all">全部</el-radio-button>
+                                <el-radio-button value="pass">成功</el-radio-button>
+                                <el-radio-button value="warning">告警</el-radio-button>
+                                <el-radio-button value="fail">失败</el-radio-button>
                             </el-radio-group>
                         </div>
                         <div class="right-actions">

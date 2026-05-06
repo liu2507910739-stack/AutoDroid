@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, markRaw, ref } from 'vue'
 import { VideoPlay, Close, Back, House, Timer, Top, Bottom, Rank } from '@element-plus/icons-vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import api from '@/api'
@@ -23,14 +23,14 @@ const hasSelectedDevice = computed(() => !!props.deviceSerial)
 
 // Pre-defined draggable steps
 const draggableSteps = ref([
-  { action: 'start_app', selector: 'com.ehaier.zgq.shop.mall', description: '启动应用', icon: VideoPlay },
-  { action: 'stop_app', selector: 'com.ehaier.zgq.shop.mall', description: '停止应用', icon: Close },
-  { action: 'back', selector: '', description: '返回', icon: Back },
-  { action: 'home', selector: '', description: '主页', icon: House },
-  { action: 'swipe', selector: 'up', description: '上滑', icon: Top },
-  { action: 'swipe', selector: 'down', description: '下滑', icon: Bottom },
-  { action: 'sleep', selector: '', value: '5', description: '强制等待 5 秒', icon: Timer },
-  { action: 'wait_until_exists', selector: '', description: '等待元素', icon: Timer },
+  { action: 'start_app', selector: 'com.ehaier.zgq.shop.mall', description: '启动应用', icon: markRaw(VideoPlay) },
+  { action: 'stop_app', selector: 'com.ehaier.zgq.shop.mall', description: '停止应用', icon: markRaw(Close) },
+  { action: 'back', selector: '', description: '返回', icon: markRaw(Back) },
+  { action: 'home', selector: '', description: '主页', icon: markRaw(House) },
+  { action: 'swipe', selector: 'up', description: '上滑', icon: markRaw(Top) },
+  { action: 'swipe', selector: 'down', description: '下滑', icon: markRaw(Bottom) },
+  { action: 'sleep', selector: '', value: '5', description: '强制等待 5 秒', icon: markRaw(Timer) },
+  { action: 'wait_until_exists', selector: '', description: '等待元素', icon: markRaw(Timer) },
 ])
 
 const handleClone = (item) => {

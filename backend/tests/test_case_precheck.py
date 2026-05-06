@@ -178,7 +178,7 @@ class CasePrecheckTests(unittest.TestCase):
             action="input",
             execute_on=["android"],
             platform_overrides={"android": {"selector": "请输入手机号码", "by": "text"}},
-            args={"text": "{{ NAME }}"},
+            args={"text": "{{NAME}}"},
         )
 
         result = precheck_case_execution(
@@ -209,7 +209,7 @@ class CasePrecheckTests(unittest.TestCase):
             action="input",
             execute_on=["android"],
             platform_overrides={"android": {"selector": "com.demo:id/price", "by": "id"}},
-            args={"text": "{{ PRICE }}"},
+            args={"text": "{{PRICE}}"},
         )
 
         result = precheck_case_execution(

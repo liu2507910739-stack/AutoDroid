@@ -19,7 +19,7 @@ from backend.step_contract import (
     normalize_action,
     normalize_execute_on,
 )
-from backend.utils.variable_render import render_step_data
+from backend.utils.variable_render import format_variable_placeholder, render_step_data
 from backend.wda_port_manager import wda_relay_manager
 
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ def collect_case_variables_map(
 
 
 def render_with_variables(raw: Any, variables: Dict[str, str]) -> Any:
-    """Recursively render {{ VAR }} placeholders in strings."""
+    """Recursively render {{VAR}} placeholders in strings."""
     if isinstance(raw, str):
         return render_step_data(raw, variables)
     if isinstance(raw, list):
@@ -164,7 +164,7 @@ def _collect_unresolved_templates(value: Any) -> List[str]:
         if isinstance(node, str):
             match = _UNRESOLVED_VAR_PATTERN.search(node)
             if match:
-                found.append(match.group(0))
+                found.append(format_variable_placeholder(match.group(1)))
             return
         if isinstance(node, list):
             for item in node:

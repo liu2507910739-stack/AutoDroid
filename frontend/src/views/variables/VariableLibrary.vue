@@ -183,7 +183,7 @@ const toggleReveal = (id) => {
 }
 
 /** 变量引用格式，避免模板中写 {{ 导致解析错误 */
-const refFormat = (key) => `{{ ${key} }}`
+const refFormat = (key) => `{{${key}}}`
 
 // ==================== 生命周期 ====================
 onMounted(() => {
@@ -292,10 +292,12 @@ onMounted(() => {
               <el-tag type="success" size="small" effect="plain" class="ref-tag">{{ refFormat(row.key) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120" align="center" fixed="right">
+          <el-table-column label="操作" width="150" align="center" fixed="right">
             <template #default="{ row }">
-              <el-button :icon="Edit" size="small" link type="primary" @click="openVarDialog(row)">编辑</el-button>
-              <el-button :icon="Delete" size="small" link type="danger" @click="handleDeleteVar(row)">删除</el-button>
+              <div class="var-actions">
+                <el-button :icon="Edit" size="small" link type="primary" @click="openVarDialog(row)">编辑</el-button>
+                <el-button :icon="Delete" size="small" link type="danger" @click="handleDeleteVar(row)">删除</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -531,6 +533,18 @@ onMounted(() => {
 .ref-tag {
   font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
   font-size: 12px;
+}
+
+.var-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.var-actions .el-button {
+  margin-left: 0;
 }
 
 /* ========== 弹窗辅助 ========== */

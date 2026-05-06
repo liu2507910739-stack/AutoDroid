@@ -311,6 +311,9 @@ export default {
     renameDevice(serial, customName) {
         return api.put(`/devices/${serial}/name`, { custom_name: customName })
     },
+    deleteDevice(serial) {
+        return api.delete(`/devices/${serial}`)
+    },
 
     // App Packages (包管理)
     getPackages(params) {

@@ -144,7 +144,7 @@ AutoDroid/
 
 1. 前端通过 WebSocket 连接 `/ws/run/{case_id}`
 2. 后端 `TestRunner` 逐步执行：
-   - **变量替换**：将 `${var}` 替换为实际值
+   - **变量替换**：将 `{{KEY}}` 替换为实际值
    - **元素定位**：根据 `selector_type` 查找元素
      - `text`：先精确匹配，失败后尝试模糊匹配 (`textContains`)
      - `image`：使用 OpenCV 模板匹配在屏幕上定位

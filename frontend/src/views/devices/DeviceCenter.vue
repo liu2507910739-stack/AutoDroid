@@ -1,7 +1,7 @@
 <script setup>
 import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Picture, Unlock, SwitchButton, Monitor, Edit } from '@element-plus/icons-vue'
+import { Refresh, Picture, Unlock, SwitchButton, Monitor, Edit, Delete } from '@element-plus/icons-vue'
 import api from '@/api'
 
 // ==================== 状态 ====================
@@ -9,6 +9,7 @@ const devices = ref([])
 const loading = ref(false)
 const syncLoading = ref(false)
 const wdaCheckingSerial = ref('')
+const deleteLoadingSerial = ref('')
 
 // 快照弹窗
 const screenshotVisible = ref(false)
@@ -106,6 +107,30 @@ const handleReboot = async (device) => {
     if (e !== 'cancel') {
       ElMessage.error('重启失败：' + (e.response?.data?.detail || e.message))
     }
+  }
+}
+
+const isDeviceOffline = (device) => String(device?.status || '').trim().toUpperCase() === 'OFFLINE'
+
+/** 删除离线设备 */
+const handleDeleteDevice = async (device) => {
+  if (!isDeviceOffline(device)) return
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除设备 ${device.model} (${device.serial}) 的信息吗？删除后可通过同步物理设备重新发现。`,
+      '确认删除设备',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
+    deleteLoadingSerial.value = device.serial
+    await api.deleteDevice(device.serial)
+    devices.value = devices.value.filter(item => item.serial !== device.serial)
+    ElMessage.success('设备信息已删除')
+  } catch (e) {
+    if (!['cancel', 'close'].includes(e)) {
+      ElMessage.error('删除失败：' + (e.response?.data?.detail || e.message))
+    }
+  } finally {
+    deleteLoadingSerial.value = ''
   }
 }
 
@@ -228,8 +253,17 @@ onBeforeUnmount(() => {
     />
 
     <!-- 设备卡片网格 -->
-    <el-row :gutter="20" v-else>
-      <el-col :xs="24" :sm="12" :md="8" :lg="6" v-for="device in devices" :key="device.serial">
+    <el-row :gutter="20" class="device-grid" v-else>
+      <el-col
+        v-for="device in devices"
+        :key="device.serial"
+        :xs="24"
+        :sm="12"
+        :md="12"
+        :lg="8"
+        :xl="6"
+        class="device-grid-item"
+      >
         <el-card class="device-card" shadow="hover">
           <!-- Header -->
           <template #header>
@@ -325,6 +359,16 @@ onBeforeUnmount(() => {
             >
               启动WDA
             </el-button>
+            <el-button
+              type="danger"
+              link
+              :icon="Delete"
+              @click="handleDeleteDevice(device)"
+              :loading="deleteLoadingSerial === device.serial"
+              :disabled="!isDeviceOffline(device)"
+            >
+              删除
+            </el-button>
           </div>
         </el-card>
       </el-col>
@@ -391,6 +435,14 @@ onBeforeUnmount(() => {
 }
 
 /* 设备卡片 */
+.device-grid {
+  min-width: 0;
+}
+
+.device-grid-item {
+  min-width: 320px;
+}
+
 .device-card {
   margin-bottom: 20px;
   border-radius: 12px;
@@ -528,9 +580,57 @@ onBeforeUnmount(() => {
 /* 卡片 Footer */
 .card-footer {
   display: flex;
-  justify-content: space-around;
+  justify-content: space-between;
+  gap: 2px;
+  flex-wrap: nowrap;
   padding-top: 12px;
   border-top: 1px solid #ebeef5;
+  min-width: 0;
+}
+
+.card-footer .el-button {
+  flex: 1 1 0;
+  justify-content: center;
+  margin-left: 0;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.card-footer :deep(.el-popconfirm__reference-wrapper) {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.card-footer :deep(.el-button > span) {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-footer :deep(.el-icon + span) {
+  margin-left: 2px;
+}
+
+@media (max-width: 480px) {
+  .device-center {
+    padding: 12px;
+  }
+
+  .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .device-grid-item {
+    min-width: 0;
+  }
 }
 
 /* 快照弹窗 */

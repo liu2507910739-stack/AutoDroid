@@ -16,7 +16,7 @@ import time
 from typing import Any, Dict, List, Optional, Type
 
 from backend.locator_resolution import resolve_locator_candidates
-from backend.utils.variable_render import render_step_data
+from backend.utils.variable_render import format_variable_placeholder, render_step_data
 from backend.step_contract import (
     normalize_action,
     normalize_error_strategy,
@@ -28,7 +28,7 @@ from .base_driver import BaseDriver
 from .ios_driver import IOSDriver
 
 logger = logging.getLogger(__name__)
-_UNRESOLVED_VAR_PATTERN = re.compile(r"{{\s*[A-Z0-9_]+\s*}}")
+_UNRESOLVED_VAR_PATTERN = re.compile(r"{{\s*([A-Z0-9_]+)\s*}}")
 _SUPPORTED_ACTIONS_BY_PLATFORM = {
     "android": {
         "click",
@@ -817,7 +817,7 @@ def _collect_unresolved_templates(value: Any) -> List[str]:
         if isinstance(node, str):
             match = _UNRESOLVED_VAR_PATTERN.search(node)
             if match:
-                found.append(match.group(0))
+                found.append(format_variable_placeholder(match.group(1)))
             return
         if isinstance(node, list):
             for item in node:

@@ -307,7 +307,7 @@ const fetchGlobalVarKeys = async (envId = props.envId) => {
 }
 
 const appendVariable = (step, field, key, sourceStep = null) => {
-  const placeholder = `{{ ${key} }}`
+  const placeholder = `{{${key}}}`
   step[field] = (step[field] || '') + placeholder
   if (!sourceStep || field !== 'selector') return
   if (isLogicalLocatorAction(sourceStep.action)) {
@@ -320,7 +320,7 @@ const appendVariable = (step, field, key, sourceStep = null) => {
 }
 
 /** 变量占位符显示，避免模板里写 {{ 导致解析错误 */
-const varPlaceholder = (k) => `{{ ${k} }}`
+const varPlaceholder = (k) => `{{${k}}}`
 
 onMounted(() => {
   fetchGlobalVarKeys()
@@ -864,9 +864,9 @@ const handleExecuteStep = async (step) => {
                 <div class="form-row">
                   <label>提取规则</label>
                   <el-radio-group v-model="step.options.extract_rule" size="small">
-                    <el-radio label="preset">内置模板</el-radio>
-                    <el-radio label="boundary">掐头去尾</el-radio>
-                    <el-radio label="regex">高级正则</el-radio>
+                    <el-radio value="preset">内置模板</el-radio>
+                    <el-radio value="boundary">掐头去尾</el-radio>
+                    <el-radio value="regex">高级正则</el-radio>
                   </el-radio-group>
                 </div>
 
@@ -925,7 +925,7 @@ const handleExecuteStep = async (step) => {
                   v-else
                   v-model="step.value"
                   size="small"
-                  :placeholder="step.action === 'assert_text' ? '输入要在当前页面中判断的文本或引用 {{ VAR }}' : '输入值或引用 {{ VAR }}'"
+                  :placeholder="step.action === 'assert_text' ? '输入要在当前页面中判断的文本或引用 {{VAR}}' : '输入值或引用 {{VAR}}'"
                 >
                   <template #append v-if="globalVarKeys.length">
                     <el-dropdown trigger="click" @command="(key) => appendVariable(step, 'value', key)">

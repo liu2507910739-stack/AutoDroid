@@ -132,7 +132,7 @@ flowchart TD
 
 渲染规则：
 
-- 占位符格式 `{{ KEY }}`，由 `backend/utils/variable_render.py` 渲染
+- 占位符格式 `{{KEY}}`，由 `backend/utils/variable_render.py` 渲染
 - 未命中变量不会硬替换，预检可拦截未解析占位符
 
 场景执行时，前序用例导出的变量会写入场景上下文并传给后续用例。

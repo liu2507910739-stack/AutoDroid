@@ -1526,15 +1526,15 @@ defineExpose({
       <div class="mode-group">
         <span class="mode-group-label">预览方式</span>
         <el-radio-group v-model="previewMode" size="small" class="mode-segmented">
-          <el-radio-button label="static">静态截图</el-radio-button>
-          <el-radio-button label="live">实时投屏</el-radio-button>
+          <el-radio-button value="static">静态截图</el-radio-button>
+          <el-radio-button value="live">实时投屏</el-radio-button>
         </el-radio-group>
       </div>
       <div class="mode-group">
         <span class="mode-group-label">交互方式</span>
         <el-radio-group v-model="interactionMode" size="small" class="mode-segmented" :disabled="isSelectedDeviceBusy">
-          <el-radio-button label="explore">探索模式</el-radio-button>
-          <el-radio-button label="record">录制模式</el-radio-button>
+          <el-radio-button value="explore">探索模式</el-radio-button>
+          <el-radio-button value="record">录制模式</el-radio-button>
         </el-radio-group>
       </div>
     </div>

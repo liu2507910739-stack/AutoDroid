@@ -2,6 +2,8 @@ from typing import List, Optional, Any, Dict
 from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from backend.utils.variable_render import normalize_variable_placeholders
+
 class ActionType(str, Enum):
     CLICK = "click"
     INPUT = "input"
@@ -49,9 +51,24 @@ class Step(BaseModel):
             return None
         return value
 
+    @field_validator("selector", "value", "description", mode="before")
+    @classmethod
+    def normalize_text_variable_placeholders(cls, value):
+        return normalize_variable_placeholders(value)
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def normalize_option_variable_placeholders(cls, value):
+        return normalize_variable_placeholders(value)
+
 class Variable(BaseModel):
     key: str
     value: str
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def normalize_value_variable_placeholders(cls, value):
+        return normalize_variable_placeholders(value)
 
 class TestCaseBase(BaseModel):
     name: str
@@ -403,6 +420,11 @@ class GlobalVariableCreate(BaseModel):
     is_secret: bool = False
     description: Optional[str] = None
 
+    @field_validator("value", "description", mode="before")
+    @classmethod
+    def normalize_variable_placeholders_in_fields(cls, value):
+        return normalize_variable_placeholders(value)
+
 class GlobalVariableRead(BaseModel):
     id: int
     env_id: int
@@ -413,6 +435,11 @@ class GlobalVariableRead(BaseModel):
     created_at: Any
     updated_at: Any = None
 
+    @field_validator("value", "description", mode="before")
+    @classmethod
+    def normalize_variable_placeholders_in_fields(cls, value):
+        return normalize_variable_placeholders(value)
+
     class Config:
         from_attributes = True
 
@@ -421,6 +448,11 @@ class GlobalVariableUpdate(BaseModel):
     value: Optional[str] = None
     is_secret: Optional[bool] = None
     description: Optional[str] = None
+
+    @field_validator("value", "description", mode="before")
+    @classmethod
+    def normalize_variable_placeholders_in_fields(cls, value):
+        return normalize_variable_placeholders(value)
 
 
 # ---- Cross-Platform Step Schemas (跨端步骤) ----
@@ -431,6 +463,11 @@ class PlatformSelector(BaseModel):
 
     selector: str = Field(..., description="定位值，如 resourceId / label / xpath")
     by: str = Field(..., description="定位策略，如 id / text / xpath / label / name")
+
+    @field_validator("selector", mode="before")
+    @classmethod
+    def normalize_selector_variable_placeholders(cls, value):
+        return normalize_variable_placeholders(value)
 
 class PlatformOverrides(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -460,6 +497,11 @@ class TestCaseStepWrite(BaseModel):
     error_strategy: str = Field(default="ABORT", description="ABORT | CONTINUE | IGNORE")
     description: Optional[str] = None
 
+    @field_validator("args", "value", "description", mode="before")
+    @classmethod
+    def normalize_variable_placeholders_in_fields(cls, value):
+        return normalize_variable_placeholders(value)
+
 class TestCaseStepCreate(TestCaseStepWrite):
     """跨端测试步骤 — 创建入参"""
     case_id: int = Field(..., description="所属用例 ID")
@@ -475,6 +517,11 @@ class TestCaseStepUpdate(BaseModel):
     timeout: Optional[int] = Field(default=None, ge=1)
     error_strategy: Optional[str] = None
     description: Optional[str] = None
+
+    @field_validator("args", "value", "description", mode="before")
+    @classmethod
+    def normalize_variable_placeholders_in_fields(cls, value):
+        return normalize_variable_placeholders(value)
 
 class TestCaseStepRead(TestCaseStepWrite):
     """跨端测试步骤 — 读取响应（包含 id/case_id）"""
