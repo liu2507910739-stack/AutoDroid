@@ -6,6 +6,7 @@ import api from '@/api'
 import { useCaseStore } from '@/stores/useCaseStore'
 import { ElMessage } from 'element-plus'
 import { createUuid } from '@/utils/uuid'
+import { ACTION_LABELS } from '@/utils/actionConstants'
 
 // Props & Store
 const props = defineProps({
@@ -23,14 +24,14 @@ const hasSelectedDevice = computed(() => !!props.deviceSerial)
 
 // Pre-defined draggable steps
 const draggableSteps = ref([
-  { action: 'start_app', selector: 'com.ehaier.zgq.shop.mall', description: '启动应用', icon: markRaw(VideoPlay) },
-  { action: 'stop_app', selector: 'com.ehaier.zgq.shop.mall', description: '停止应用', icon: markRaw(Close) },
-  { action: 'back', selector: '', description: '返回', icon: markRaw(Back) },
-  { action: 'home', selector: '', description: '主页', icon: markRaw(House) },
+  { action: 'start_app', selector: 'com.ehaier.zgq.shop.mall', description: ACTION_LABELS.start_app, icon: markRaw(VideoPlay) },
+  { action: 'stop_app', selector: 'com.ehaier.zgq.shop.mall', description: ACTION_LABELS.stop_app, icon: markRaw(Close) },
+  { action: 'back', selector: '', description: ACTION_LABELS.back, icon: markRaw(Back) },
+  { action: 'home', selector: '', description: ACTION_LABELS.home, icon: markRaw(House) },
   { action: 'swipe', selector: 'up', description: '上滑', icon: markRaw(Top) },
   { action: 'swipe', selector: 'down', description: '下滑', icon: markRaw(Bottom) },
-  { action: 'sleep', selector: '', value: '5', description: '强制等待 5 秒', icon: markRaw(Timer) },
-  { action: 'wait_until_exists', selector: '', description: '等待元素', icon: markRaw(Timer) },
+  { action: 'sleep', selector: '', value: '5', description: `${ACTION_LABELS.sleep} 5 秒`, icon: markRaw(Timer) },
+  { action: 'wait_until_exists', selector: '', description: ACTION_LABELS.wait_until_exists, icon: markRaw(Timer) },
 ])
 
 const handleClone = (item) => {
