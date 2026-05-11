@@ -146,9 +146,12 @@ const jankMonitoringMode = computed(() => {
 })
 const jankMonitoringModeLabel = computed(() => {
     if (!jankFrameMonitorEnabled.value) return '已关闭'
-    if (jankMonitoringMode.value === 'gfxinfo+perfetto') return '系统帧统计 + Perfetto'
-    if (jankMonitoringMode.value === 'gfxinfo') return '系统帧统计'
-    return jankMonitoringMode.value
+    const mode = jankMonitoringMode.value
+    if (mode === 'framestats+perfetto') return '逐帧采集 + Perfetto'
+    if (mode === 'framestats') return '逐帧采集'
+    if (mode === 'gfxinfo+perfetto') return '系统帧统计 + Perfetto'
+    if (mode === 'gfxinfo') return '系统帧统计'
+    return mode
 })
 
 const reportBaseDate = computed(() => {
@@ -525,22 +528,40 @@ const jankChartOption = computed(() => {
         })),
         'jankRatePercent',
     )
+
+    const hasFramestats = jankData.value.some(p => p.source === 'framestats')
+    const framestatsFpsSeries = hasFramestats
+        ? buildClockSeries(
+            jankData.value.filter(p => !p.is_idle && p.fps > 0),
+            'fps',
+        )
+        : []
+
     const tracePoints = traceCurveSeries.value
     const traceFpsSeries = tracePoints
         .map(point => [point.timestamp, point.effectiveFps])
         .filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]))
+
+    const fpsSeries = framestatsFpsSeries.length > 0 ? framestatsFpsSeries : traceFpsSeries
+    const hasFpsCurve = fpsSeries.length > 0
+    const fpsLabel = framestatsFpsSeries.length > 0 ? '实时 FPS' : (
+        preferredTraceForCurve.value && getTraceCaptureMode(preferredTraceForCurve.value) === 'continuous'
+            ? '实际流畅帧率'
+            : '实际流畅帧率（局部）'
+    )
+
     const maxJankRateValue = gfxSeries.reduce((best, current) => (
         Number.isFinite(current?.[1]) ? Math.max(best, current[1]) : best
     ), 0)
     const jankAxisMax = Math.ceil(Math.max(30, maxJankRateValue * 1.5))
-    const hasTraceCurve = tracePoints.length > 0
-    const traceCurveLabel = preferredTraceForCurve.value && getTraceCaptureMode(preferredTraceForCurve.value) === 'continuous'
-        ? '实际流畅帧率'
-        : '实际流畅帧率（局部）'
+
+    const chartTitle = hasFpsCurve
+        ? (hasFramestats ? '卡顿帧监控（逐帧 FPS + 卡顿率）' : '卡顿帧监控（Trace FPS + 卡顿率）')
+        : '卡顿帧监控（卡顿率）'
 
     return {
         title: {
-            text: hasTraceCurve ? '卡顿帧监控（Trace FPS + gfxinfo 卡顿率）' : '卡顿帧监控（gfxinfo 触发信号）',
+            text: chartTitle,
             left: 'center',
             textStyle: { fontSize: 15, color: '#303133' },
         },
@@ -548,7 +569,7 @@ const jankChartOption = computed(() => {
             trigger: 'axis',
             axisPointer: { type: 'cross' },
         },
-        legend: { data: hasTraceCurve ? [traceCurveLabel, '卡顿率 (%)'] : ['卡顿率 (%)'], top: 35 },
+        legend: { data: hasFpsCurve ? [fpsLabel, '卡顿率 (%)'] : ['卡顿率 (%)'], top: 35 },
         toolbox: {
             right: 20,
             feature: { saveAsImage: {} },
@@ -562,7 +583,7 @@ const jankChartOption = computed(() => {
                 formatter: (value) => formatAxisTime(value),
             },
         },
-        yAxis: hasTraceCurve ? [
+        yAxis: hasFpsCurve ? [
             {
                 type: 'value',
                 name: 'FPS',
@@ -585,12 +606,12 @@ const jankChartOption = computed(() => {
             axisLabel: { formatter: '{value}%' },
         },
         series: [
-            ...(hasTraceCurve ? [{
-                name: traceCurveLabel,
+            ...(hasFpsCurve ? [{
+                name: fpsLabel,
                 type: 'line',
                 smooth: true,
                 connectNulls: true,
-                data: traceFpsSeries,
+                data: fpsSeries,
                 yAxisIndex: 0,
                 lineStyle: { color: '#409EFF', width: 2 },
                 itemStyle: { color: '#409EFF' },
@@ -601,7 +622,7 @@ const jankChartOption = computed(() => {
                 type: 'line',
                 smooth: true,
                 data: gfxSeries,
-                ...(hasTraceCurve ? { yAxisIndex: 1 } : {}),
+                ...(hasFpsCurve ? { yAxisIndex: 1 } : {}),
                 lineStyle: { color: '#F56C6C', width: 2 },
                 itemStyle: { color: '#F56C6C' },
                 areaStyle: { color: 'rgba(245,108,108,0.08)' },
