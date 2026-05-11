@@ -215,6 +215,7 @@ from backend.feature_flags import (
     is_flag_enabled,
 )
 from backend.step_contract import (
+    ACTION_DISPLAY_NAMES,
     legacy_step_to_standard,
     normalize_error_strategy,
     normalize_execute_on,
@@ -636,12 +637,47 @@ def _get_recording_coordinate_scale(device, platform: str) -> float:
 
 
 def _get_recording_post_action_delay(platform: str, operation: str) -> float:
+    """返回操作后的最小等待时间（秒），用于给页面一个起始响应窗口。"""
     operation_text = str(operation or "").strip().lower()
-    if platform == "ios" and operation_text == "click":
-        return 0.35
-    if platform == "ios":
+    if operation_text in ("start_app", "stop_app"):
         return 0.6
-    return 1.0
+    if platform == "ios" and operation_text == "click":
+        return 0.15
+    if platform == "ios":
+        return 0.3
+    return 0.2
+
+
+def _screenshot_hash(device) -> str:
+    """快速获取当前屏幕截图的哈希值，用于对比 UI 是否稳定。"""
+    image = device.screenshot()
+    if isinstance(image, (bytes, bytearray)):
+        raw = bytes(image)
+    else:
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        raw = buf.getvalue()
+    return hashlib.md5(raw).hexdigest()
+
+
+def _wait_ui_stable(device, platform: str, operation: str, timeout: float = 3.0) -> None:
+    """
+    等待设备 UI 稳定：先等最小间隔，再通过截图对比轮询检测。
+    两次连续截图哈希一致即认为页面已稳定。
+    """
+    min_delay = _get_recording_post_action_delay(platform, operation)
+    time.sleep(min_delay)
+
+    poll_interval = 0.25
+    deadline = time.monotonic() + (timeout - min_delay)
+
+    prev_hash = _screenshot_hash(device)
+    while time.monotonic() < deadline:
+        time.sleep(poll_interval)
+        curr_hash = _screenshot_hash(device)
+        if curr_hash == prev_hash:
+            return
+        prev_hash = curr_hash
 
 
 def _perform_device_operation(device, platform: str, req: InteractionRequest) -> None:
@@ -878,15 +914,15 @@ def interact_with_device(req: InteractionRequest, session: Session = Depends(get
                 "selector": req.action_data or "",
                 "selector_type": "text" if req.operation in ["start_app", "stop_app", "swipe"] else "resourceId",
                 "value": "",
-                "description": f"Execute {req.operation} {req.action_data or ''}",
+                "description": f"{ACTION_DISPLAY_NAMES.get(req.operation, req.operation)} {req.action_data or ''}".strip(),
                 "error_strategy": "ABORT"
             }
 
         # 4. 在设备上执行操作
         _perform_device_operation(device, platform=platform, req=req)
-        
+
         # 5. 等待 UI 稳定后返回新状态
-        time.sleep(_get_recording_post_action_delay(platform, req.operation))
+        _wait_ui_stable(device, platform=platform, operation=req.operation)
 
         return {
             "step": step_info,
@@ -1051,7 +1087,7 @@ def execute_single_step(payload: SingleStepPayload, session: Session = Depends(g
                 }
             )
             step_result = runner.run_step(standard_step)
-            time.sleep(0.5)
+            _wait_ui_stable(runner.driver, platform=platform, operation=standard_step.get("action", ""))
             return {
                 "result": _cross_platform_result_to_legacy_payload(step_result),
                 "dump": _build_device_dump_payload(
@@ -1076,10 +1112,10 @@ def execute_single_step(payload: SingleStepPayload, session: Session = Depends(g
         # 执行步骤 
         step_model = Step.model_validate(payload.step)
         result = runner.execute_step(step_model, variables_map)
-        
+
         # 等待 UI 稳定
-        time.sleep(0.5)
-        
+        _wait_ui_stable(d, platform="android", operation=step_model.action)
+
         return {
             "result": result,
             "dump": {

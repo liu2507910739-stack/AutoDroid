@@ -10,6 +10,7 @@ import {
 } from '@element-plus/icons-vue'
 import LogConsole from '@/components/LogConsole.vue'
 import { createUuid } from '@/utils/uuid'
+import { ACTION_LABELS, getActionLabel, getActionColor } from '@/utils/actionConstants'
 
 const route = useRoute()
 const router = useRouter()
@@ -446,22 +447,12 @@ const toggleStepExpand = (index) => {
 
 const isStepExpanded = (index) => expandedPreviewSteps.value.has(index)
 
-const actionOptions = [
-  { value: 'click', label: '点击 (Click)' },
-  { value: 'click_image', label: '图像点击 (Click Image)' },
-  { value: 'input', label: '输入 (Input)' },
-  { value: 'wait_until_exists', label: '等待元素 (Wait)' },
-  { value: 'assert_text', label: '文本断言 (Assert)' },
-  { value: 'assert_image', label: '图像断言 (Assert Image)' },
-  { value: 'swipe', label: '滑动 (Swipe)' },
-  { value: 'sleep', label: '强制等待 (Sleep)' },
-  { value: 'extract_by_ocr', label: 'OCR提取变量 (OCR)' },
-  { value: 'start_app', label: '启动应用 (Start App)' },
-  { value: 'stop_app', label: '停止应用 (Stop App)' }
-]
+const actionOptions = Object.entries(ACTION_LABELS)
+  .filter(([k]) => !['back', 'home'].includes(k))
+  .map(([value, label]) => ({ value, label }))
 
 const getStepTitle = (step) => {
-  const actionLabel = actionOptions.find(a => a.value === step.action)?.label || step.action
+  const actionLabel = getActionLabel(step.action)
   let target = step.selector ? (step.selector.length > 25 ? step.selector.slice(0, 25) + '...' : step.selector) : '?'
   if (step.action === 'sleep') {
     target = step.value ? `${step.value}s` : '5s'
@@ -473,24 +464,7 @@ const getStepTitle = (step) => {
   } else if (step.action === 'extract_by_ocr') {
     target = step.value || 'OCR_VAR'
   }
-  return `${actionLabel.split(' ')[0]} → ${target}`
-}
-
-const getActionColor = (action) => {
-  const colors = {
-    click: '#667eea',
-    click_image: '#764ba2',
-    input: '#f093fb',
-    wait_until_exists: '#4facfe',
-    assert_text: '#fa709a',
-    assert_image: '#ff8a65',
-    swipe: '#30cfd0',
-    sleep: '#e6a23c',
-    extract_by_ocr: '#67c23a',
-    start_app: '#67c23a',
-    stop_app: '#f56c6c'
-  }
-  return colors[action] || '#909399'
+  return `${actionLabel} → ${target}`
 }
 </script>
 

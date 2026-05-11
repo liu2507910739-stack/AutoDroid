@@ -43,6 +43,22 @@ ACTION_ALIASES = {
     "EXTRACT_BY_OCR": "extract_by_ocr",
 }
 
+ACTION_DISPLAY_NAMES = {
+    "click": "点击",
+    "click_image": "图像点击",
+    "input": "输入",
+    "wait_until_exists": "等待元素",
+    "assert_text": "文本断言",
+    "assert_image": "图像断言",
+    "swipe": "滑动",
+    "sleep": "强制等待",
+    "extract_by_ocr": "OCR提取变量",
+    "start_app": "启动应用",
+    "stop_app": "停止应用",
+    "back": "返回",
+    "home": "主页",
+}
+
 VALID_PLATFORMS = {"android", "ios"}
 VALID_ERROR_STRATEGIES = {"ABORT", "CONTINUE", "IGNORE"}
 

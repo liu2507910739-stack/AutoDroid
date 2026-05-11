@@ -5,6 +5,7 @@ import { ArrowLeft, Monitor, Timer, User, Picture } from '@element-plus/icons-vu
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
+import { ACTION_LABELS } from '@/utils/actionConstants'
 
 const route = useRoute()
 const router = useRouter()
@@ -51,6 +52,14 @@ const formatDeviceName = (deviceSerial, fallbackInfo) => {
 
 const normalizeStatus = (status) => String(status || '').toUpperCase()
 
+const translateStepDesc = (desc) => {
+    const match = desc.match(/^(\w+)\s*(.*)$/)
+    if (match && ACTION_LABELS[match[1]]) {
+        return `${ACTION_LABELS[match[1]]} ${match[2]}`.trim()
+    }
+    return desc
+}
+
 const getStatusTagType = (status) => {
     const s = normalizeStatus(status)
     if (s === 'PASS') return 'success'
@@ -88,13 +97,15 @@ const fetchDetail = async () => {
             rawSteps.forEach(step => {
                 let caseName = "未分组步骤"
                 let stepDesc = step.step_name
-                
+
                 // Parse pattern: "[case_name] step_desc"
                 const match = step.step_name.match(/^\[(.*?)\]\s*(.*)$/)
                 if (match) {
                     caseName = match[1]
                     stepDesc = match[2]
                 }
+
+                stepDesc = translateStepDesc(stepDesc)
                 
                 if (!caseMap.has(caseName)) {
                     caseMap.set(caseName, {

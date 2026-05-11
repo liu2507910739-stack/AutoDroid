@@ -8,6 +8,7 @@ import apiClient from '@/api'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
 import { createUuid } from '@/utils/uuid'
+import { ACTION_LABELS, getActionLabel, getActionColor } from '@/utils/actionConstants'
 
 const caseStore = useCaseStore()
 const { currentCase, lastAddedStepUuid } = storeToRefs(caseStore)
@@ -406,17 +407,9 @@ watch(lastAddedStepUuid, (stepUuid, previousUuid) => {
   scrollStepIntoView(stepUuid)
 })
 
-const actionOptions = [
-  { value: 'input', label: '输入' },
-  { value: 'wait_until_exists', label: '等待元素' },
-  { value: 'assert_text', label: '文本断言' },
-  { value: 'assert_image', label: '图像断言' },
-  { value: 'sleep', label: '强制等待' },
-  { value: 'swipe', label: '滑动' },
-  { value: 'extract_by_ocr', label: 'OCR提取变量' },
-  { value: 'click_image', label: '图像点击' },
-  { value: 'click', label: '点击' }
-]
+const actionOptions = Object.entries(ACTION_LABELS)
+  .filter(([k]) => !['start_app', 'stop_app', 'back', 'home'].includes(k))
+  .map(([value, label]) => ({ value, label }))
 
 const toggleExpand = (index) => {
   const step = currentCase.value.steps[index]
@@ -474,7 +467,7 @@ const handleActionChange = (step) => {
 }
 
 const getStepTitle = (step) => {
-  const actionLabel = actionOptions.find(a => a.value === step.action)?.label || step.action
+  const actionLabel = getActionLabel(step.action)
   if (step.action === 'assert_text') {
     const matchMode = step?.options?.match_mode === 'not_contains' ? '不包含' : '包含'
     const expectedText = String(step?.value || '').trim()
@@ -492,22 +485,7 @@ const getStepTitle = (step) => {
     ? (step?.platform_overrides?.android?.selector || step.selector)
     : (step?.selector || step?.platform_overrides?.android?.selector)
   const target = targetSelector ? (targetSelector.length > 25 ? targetSelector.slice(0, 25) + '...' : targetSelector) : '?'
-  return `${actionLabel.split(' ')[0]} → ${target}`
-}
-
-const getActionColor = (action) => {
-  const colors = {
-    click: '#667eea',
-    click_image: '#764ba2',
-    input: '#f093fb',
-    wait_until_exists: '#4facfe',
-    assert_text: '#fa709a',
-    assert_image: '#ff8a65',
-    swipe: '#30cfd0',
-    sleep: '#e6a23c',
-    extract_by_ocr: '#67c23a'
-  }
-  return colors[action] || '#909399'
+  return `${actionLabel} → ${target}`
 }
 
 const removeStep = (index) => {

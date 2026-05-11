@@ -8,15 +8,22 @@ from unittest.mock import AsyncMock, patch
 from backend.fastbot_runner import (
     JANK_ACTIVE_FRAME_THRESHOLD,
     JANK_MAX_TRACE_EXPORTS,
+    FRAMESTATS_MIN_SDK_INT,
+    VSYNC_PERIOD_NS,
+    FrameStatsSample,
+    FramestatsMonitorState,
     PerfettoSessionState,
     _analyze_exported_traces,
     _build_trace_artifact,
     _build_perfetto_trace_config,
     _classify_jank_sample,
+    _compute_framestats_sample,
     _compute_jank_summary,
     _detect_perfetto_support,
+    _detect_vsync_period,
     _export_perfetto_trace,
     _find_closest_perf_sample,
+    _parse_framestats_output,
     _parse_gfxinfo_output,
     _resolve_jank_monitoring_mode,
     _should_export_perfetto_trace,
@@ -315,6 +322,251 @@ class FastbotPerfettoSupportTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(state.available)
         self.assertFalse(state.frame_timeline_supported)
+
+
+SAMPLE_FRAMESTATS_OUTPUT = """Applications Graphics Acceleration Info:
+Uptime: 12345678 Realtime: 12345678
+
+** Graphics info for pid 1234 [com.example.app] **
+
+Stats since: 645122399803ns
+Total frames rendered: 300
+Janky frames: 10 (3.33%)
+
+---PROFILEDATA---
+Flags,IntendedVsync,Vsync,OldestInputEvent,NewestInputEvent,HandleInputStart,AnimationStart,PerformTraversalsStart,DrawStart,SyncQueued,SyncStart,IssueDrawCommandsStart,SwapBuffers,FrameCompleted,DeadlineNs
+0,1000000000,1000000000,1000000000,1000000000,1001000000,1002000000,1003000000,1005000000,1008000000,1009000000,1010000000,1012000000,1015000000,1016666667
+0,1016666667,1016666667,1016666667,1016666667,1017666667,1018666667,1019666667,1021666667,1024666667,1025666667,1026666667,1028666667,1031666667,1033333334
+0,1033333334,1033333334,1033333334,1033333334,1034333334,1035333334,1036333334,1038333334,1041333334,1042333334,1043333334,1045333334,1048333334,1050000001
+1,1050000001,1050000001,1050000001,1050000001,1051000001,1052000001,1053000001,1055000001,1058000001,1059000001,1060000001,1062000001,1065000001,1066666668
+0,1066666668,1066666668,1066666668,1066666668,1067666668,1068666668,1069666668,1071666668,1074666668,1075666668,1076666668,1078666668,1081666668,1083333335
+0,1083333335,1083333335,1083333335,1083333335,1084333335,1085333335,1086333335,1088333335,1091333335,1092333335,1093333335,1095333335,1098333335,1100000002
+---PROFILEDATA---
+"""
+
+SAMPLE_FRAMESTATS_FROZEN = """---PROFILEDATA---
+Flags,IntendedVsync,Vsync,OldestInputEvent,NewestInputEvent,HandleInputStart,AnimationStart,PerformTraversalsStart,DrawStart,SyncQueued,SyncStart,IssueDrawCommandsStart,SwapBuffers,FrameCompleted,DeadlineNs
+0,2000000000,2000000000,2000000000,2000000000,2001000000,2002000000,2003000000,2005000000,2008000000,2009000000,2010000000,2012000000,2750000000,2016666667
+---PROFILEDATA---
+"""
+
+SAMPLE_FRAMESTATS_SDK31 = """---PROFILEDATA---
+Flags,FrameTimelineVsyncId,IntendedVsync,Vsync,InputEventId,HandleInputStart,AnimationStart,PerformTraversalsStart,DrawStart,FrameDeadline,FrameStartTime,FrameInterval,WorkloadTarget,SyncQueued,SyncStart,IssueDrawCommandsStart,SwapBuffers,FrameCompleted,DequeueBufferDuration,QueueBufferDuration,GpuCompleted,SwapBuffersCompleted,DisplayPresentTime,CommandSubmissionCompleted,
+0,92298737,28505515984415,28505515984415,0,28505517424727,28505517424727,28505517424727,28505518055831,28505527095526,28505515984415,11111111,5555555,28505519123456,28505519200000,28505519500000,28505520000000,28505521000000,100000,50000,28505521500000,28505520100000,28505522000000,28505520200000,
+0,92298738,28505527095526,28505527095526,0,28505528000000,28505528000000,28505528000000,28505529000000,28505538206637,28505527095526,11111111,5555555,28505530000000,28505530100000,28505530500000,28505531000000,28505532000000,100000,50000,28505532500000,28505531100000,28505533000000,28505531200000,
+0,92298739,28505538206637,28505538206637,0,28505539000000,28505539000000,28505539000000,28505540000000,28505549317748,28505538206637,11111111,5555555,28505541000000,28505541100000,28505541500000,28505542000000,28505543000000,100000,50000,28505543500000,28505542100000,28505544000000,28505542200000,
+1,92298740,28505549317748,28505549317748,0,28505550000000,28505550000000,28505550000000,28505551000000,28505560428859,28505549317748,11111111,5555555,28505552000000,28505552100000,28505552500000,28505553000000,28505554000000,100000,50000,28505554500000,28505553100000,28505555000000,28505553200000,
+0,92298741,28505560428859,28505560428859,0,28505561000000,28505561000000,28505561000000,28505562000000,28505571539970,28505560428859,11111111,5555555,28505563000000,28505563100000,28505563500000,28505564000000,28505565000000,100000,50000,28505565500000,28505564100000,28505566000000,28505564200000,
+---PROFILEDATA---
+"""
+
+
+class FramestatsParsingTests(unittest.TestCase):
+    def test_parse_framestats_output_extracts_per_frame_data(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)
+        self.assertEqual(len(frames), 5)
+        self.assertEqual(frames[0].intended_vsync_ns, 1000000000)
+        self.assertEqual(frames[0].frame_completed_ns, 1015000000)
+        self.assertEqual(frames[0].deadline_ns, 1016666667)
+
+    def test_parse_framestats_skips_flagged_frames(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)
+        intended_vsyncs = [f.intended_vsync_ns for f in frames]
+        self.assertNotIn(1050000001, intended_vsyncs)
+
+    def test_parse_framestats_empty_input(self):
+        self.assertEqual(_parse_framestats_output(""), [])
+        self.assertEqual(_parse_framestats_output("No process found"), [])
+
+    def test_parse_framestats_sdk31_format(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_SDK31)
+        self.assertEqual(len(frames), 4)
+        self.assertEqual(frames[0].intended_vsync_ns, 28505515984415)
+        self.assertEqual(frames[0].frame_completed_ns, 28505521000000)
+        self.assertEqual(frames[0].deadline_ns, 28505527095526)
+        self.assertAlmostEqual(frames[0].total_duration_ms, 5.016, delta=0.1)
+        self.assertFalse(frames[0].is_jank)
+
+    def test_parse_framestats_sdk31_skips_flagged(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_SDK31)
+        intended_vsyncs = [f.intended_vsync_ns for f in frames]
+        self.assertNotIn(28505549317748, intended_vsyncs)
+
+    def test_parse_framestats_sdk31_trailing_comma(self):
+        """SDK 31+ 格式的 header 和数据行末尾有逗号，解析器应正确处理。"""
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_SDK31)
+        self.assertTrue(len(frames) > 0)
+        for frame in frames:
+            self.assertGreater(frame.intended_vsync_ns, 0)
+            self.assertGreater(frame.frame_completed_ns, frame.intended_vsync_ns)
+
+    def test_frame_stats_sample_properties(self):
+        frame = FrameStatsSample(
+            intended_vsync_ns=1000000000,
+            vsync_ns=1000000000,
+            draw_start_ns=1005000000,
+            sync_start_ns=1009000000,
+            issue_draw_commands_start_ns=1010000000,
+            swap_buffers_ns=1012000000,
+            frame_completed_ns=1015000000,
+            deadline_ns=1016666667,
+        )
+        self.assertAlmostEqual(frame.total_duration_ms, 15.0, places=1)
+        self.assertFalse(frame.missed_deadline)
+        self.assertFalse(frame.is_jank)
+        self.assertFalse(frame.is_frozen)
+
+    def test_frame_stats_sample_jank_detection(self):
+        frame = FrameStatsSample(
+            intended_vsync_ns=1000000000,
+            vsync_ns=1000000000,
+            draw_start_ns=1005000000,
+            sync_start_ns=1009000000,
+            issue_draw_commands_start_ns=1010000000,
+            swap_buffers_ns=1012000000,
+            frame_completed_ns=1040000000,
+            deadline_ns=1016666667,
+        )
+        self.assertAlmostEqual(frame.total_duration_ms, 40.0, places=1)
+        self.assertTrue(frame.missed_deadline)
+        self.assertTrue(frame.is_jank)
+        self.assertFalse(frame.is_frozen)
+
+    def test_frame_stats_sample_frozen_detection(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_FROZEN)
+        self.assertEqual(len(frames), 1)
+        self.assertTrue(frames[0].is_frozen)
+        self.assertAlmostEqual(frames[0].total_duration_ms, 750.0, places=0)
+
+
+class FramestatsDeduplicationTests(unittest.TestCase):
+    def test_deduplication_filters_already_seen(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)
+        state = FramestatsMonitorState()
+        state.last_seen_vsync_ns = frames[2].intended_vsync_ns
+
+        new_frames = [f for f in frames if f.intended_vsync_ns > state.last_seen_vsync_ns]
+        self.assertEqual(len(new_frames), 2)
+        self.assertEqual(new_frames[0].intended_vsync_ns, 1066666668)
+
+    def test_deduplication_all_seen(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)
+        state = FramestatsMonitorState()
+        state.last_seen_vsync_ns = frames[-1].intended_vsync_ns
+
+        new_frames = [f for f in frames if f.intended_vsync_ns > state.last_seen_vsync_ns]
+        self.assertEqual(len(new_frames), 0)
+
+
+class FramestatsComputeTests(unittest.TestCase):
+    def test_compute_framestats_real_fps(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)
+        sample = _compute_framestats_sample(frames, timestamp="12:00:00")
+
+        self.assertIsNotNone(sample)
+        self.assertEqual(sample["source"], "framestats")
+        self.assertEqual(sample["total_frames"], 5)
+        self.assertGreater(sample["fps"], 0)
+        self.assertFalse(sample["is_idle"])
+
+    def test_compute_framestats_detects_jank(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_FROZEN)
+        sample = _compute_framestats_sample(frames, timestamp="12:00:00")
+
+        self.assertIsNotNone(sample)
+        self.assertEqual(sample["frozen_frames"], 1)
+        self.assertGreater(sample["frame_time_max_ms"], 700)
+
+    def test_compute_framestats_percentiles(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)
+        sample = _compute_framestats_sample(frames, timestamp="12:00:00")
+
+        self.assertIn("frame_time_p50_ms", sample)
+        self.assertIn("frame_time_p90_ms", sample)
+        self.assertIn("frame_time_p95_ms", sample)
+        self.assertIn("frame_time_p99_ms", sample)
+        self.assertIn("frame_time_max_ms", sample)
+        self.assertIn("frame_time_avg_ms", sample)
+        self.assertGreater(sample["frame_time_p50_ms"], 0)
+        self.assertGreaterEqual(sample["frame_time_p99_ms"], sample["frame_time_p50_ms"])
+
+    def test_compute_framestats_empty_returns_none(self):
+        self.assertIsNone(_compute_framestats_sample([]))
+
+    def test_adaptive_vsync_period_60hz(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)
+        period = _detect_vsync_period(frames)
+        self.assertAlmostEqual(period / 1_000_000, 16.67, delta=1.0)
+
+    def test_adaptive_vsync_period_too_few_frames(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)[:2]
+        period = _detect_vsync_period(frames)
+        self.assertEqual(period, VSYNC_PERIOD_NS)
+
+
+class FramestatsClassifyTests(unittest.TestCase):
+    def test_framestats_frozen_frame_via_max_ms(self):
+        sample = {
+            "source": "framestats",
+            "total_frames": 10,
+            "render_throughput": 50,
+            "fps": 50,
+            "jank_rate": 0.1,
+            "frozen_frames": 0,
+            "jank_frames": 1,
+            "slow_frames": 0,
+            "frame_deadline_missed": 0,
+            "missed_vsync": 0,
+            "is_idle": False,
+            "frame_time_max_ms": 800,
+            "frame_time_p99_ms": 800,
+        }
+        verdict = _classify_jank_sample(sample)
+        self.assertEqual(verdict["severity"], "CRITICAL")
+        self.assertEqual(verdict["reason"], "FROZEN_FRAME")
+        self.assertTrue(verdict["immediate"])
+
+    def test_framestats_high_p99_critical(self):
+        sample = {
+            "source": "framestats",
+            "total_frames": 50,
+            "render_throughput": 40,
+            "fps": 40,
+            "jank_rate": 0.20,
+            "frozen_frames": 0,
+            "jank_frames": 10,
+            "slow_frames": 5,
+            "frame_deadline_missed": 8,
+            "missed_vsync": 0,
+            "is_idle": False,
+            "frame_time_max_ms": 200,
+            "frame_time_p99_ms": 150,
+        }
+        verdict = _classify_jank_sample(sample)
+        self.assertEqual(verdict["severity"], "CRITICAL")
+        self.assertEqual(verdict["reason"], "HIGH_FRAME_TIME_P99")
+
+    def test_framestats_backward_compatible_with_classify(self):
+        frames = _parse_framestats_output(SAMPLE_FRAMESTATS_OUTPUT)
+        sample = _compute_framestats_sample(frames, timestamp="12:00:00")
+        verdict = _classify_jank_sample(sample)
+        self.assertIn(verdict["severity"], [None, "WARNING", "CRITICAL"])
+
+
+class FramestatsMonitoringModeTests(unittest.TestCase):
+    def test_resolve_mode_framestats(self):
+        mode = _resolve_jank_monitoring_mode(True, use_framestats=True)
+        self.assertEqual(mode, "framestats")
+
+    def test_resolve_mode_framestats_with_perfetto(self):
+        state = PerfettoSessionState(report_dir="/tmp")
+        state.available = True
+        mode = _resolve_jank_monitoring_mode(True, perfetto_state=state, use_framestats=True)
+        self.assertEqual(mode, "framestats+perfetto")
+
+    def test_resolve_mode_gfxinfo_fallback(self):
+        mode = _resolve_jank_monitoring_mode(True, use_framestats=False)
+        self.assertEqual(mode, "gfxinfo")
 
 
 if __name__ == "__main__":
