@@ -1,5 +1,8 @@
 import unittest
+import base64
+import tempfile
 from unittest.mock import patch
+from pathlib import Path
 
 from PIL import Image
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -7,6 +10,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from backend.api.scenarios import (
     _build_cases_results_from_raw_results,
     _persist_case_result_and_build_case_report,
+    _persist_step_screenshot,
 )
 from backend.models import TestExecution, TestResult, TestScenario
 
@@ -165,6 +169,22 @@ class ScenarioCaseResultPersistenceTests(unittest.TestCase):
         self.assertEqual(rows[0].status, "FAIL")
         self.assertEqual(rows[0].step_name, "[missing-case] Case not found: 404")
         self.assertEqual(rows[0].error_message, "Case not found: 404")
+
+    def test_persist_step_screenshot_accepts_data_uri(self):
+        png_payload = base64.b64encode(b"\x89PNG\r\n\x1a\nfake").decode("utf-8")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("backend.api.scenarios._get_reports_root_dir", return_value=tmpdir):
+                stored_path = _persist_step_screenshot(
+                    execution_id=42,
+                    step_order=7,
+                    screenshot_b64=f"data:image/png;base64,{png_payload}",
+                )
+
+            self.assertEqual(stored_path, "screenshots/exec_42_step_7.png")
+            saved_file = Path(tmpdir) / stored_path
+            self.assertTrue(saved_file.exists())
+            self.assertEqual(saved_file.read_bytes(), b"\x89PNG\r\n\x1a\nfake")
 
 
 if __name__ == "__main__":

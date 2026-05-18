@@ -7,7 +7,8 @@ const api = axios.create({
 
 const buildReportAssetUrl = (path) => {
     const normalized = String(path || '').trim().replace(/^\/+/, '')
-    return normalized ? `/api/report-assets/${encodeURI(normalized)}` : ''
+    const encodedPath = normalized.split('/').map(encodeURIComponent).join('/')
+    return encodedPath ? `/api/report-assets/${encodedPath}` : ''
 }
 
 // Request interceptor
