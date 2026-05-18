@@ -230,6 +230,7 @@ class ScrcpyDeviceManager:
     def __init__(self):
         self._devices: Dict[str, DeviceInfo] = {}
         self._used_ports: set = set()
+        self._connecting: Set[str] = set()
         self._tracking_thread: Optional[threading.Thread] = None
         self._running: bool = False
         self._lock = threading.Lock()
@@ -308,6 +309,17 @@ class ScrcpyDeviceManager:
 
     def _on_device_connected(self, serial: str):
         """设备接入时：部署 scrcpy-server → 分配端口 → 启动流"""
+        with self._lock:
+            if serial in self._devices or serial in self._connecting:
+                logger.info("设备流已在管理中，跳过重复初始化: %s", serial)
+                return
+            self._connecting.add(serial)
+
+        local_port: Optional[int] = None
+        dev_info: Optional[DeviceInfo] = None
+        proc: Optional[subprocess.Popen] = None
+        video_sock: Optional[socket.socket] = None
+        ctrl_sock: Optional[socket.socket] = None
         try:
             adb = adbutils.AdbClient()
             device = adb.device(serial)
@@ -316,9 +328,15 @@ class ScrcpyDeviceManager:
             local_port = self._allocate_port()
             if local_port is None:
                 logger.error(f"端口分配失败，无可用端口 (范围 {PORT_RANGE_START}-{PORT_RANGE_END})")
+                dev_info = DeviceInfo(serial, 0)
+                dev_info.error = f"端口分配失败，无可用端口 (范围 {PORT_RANGE_START}-{PORT_RANGE_END})"
+                with self._lock:
+                    self._devices[serial] = dev_info
                 return
 
             dev_info = DeviceInfo(serial, local_port)
+            with self._lock:
+                self._devices[serial] = dev_info
 
             # 2. 部署 scrcpy-server.jar
             if not self._deploy_scrcpy_server(device):
@@ -359,7 +377,6 @@ class ScrcpyDeviceManager:
             dev_info.scrcpy_process = proc
 
             # 6. 等待并建立 video socket（第一个连接）
-            video_sock = None
             for attempt in range(5):
                 time.sleep(1)
                 if proc.poll() is not None:
@@ -377,7 +394,8 @@ class ScrcpyDeviceManager:
                     logger.info(f"Video socket 连接成功 (第 {attempt + 1} 次尝试)")
                     break
                 except Exception as e:
-                    video_sock.close()
+                    if video_sock:
+                        video_sock.close()
                     video_sock = None
                     logger.info(f"Video socket 重试 ({attempt + 1}/5): {e}")
 
@@ -465,8 +483,33 @@ class ScrcpyDeviceManager:
             with self._lock:
                 self._devices[serial] = dev_info
 
-        except Exception:
+        except Exception as exc:
             logger.exception("设备流初始化异常: serial=%s", serial)
+            if dev_info is None:
+                dev_info = DeviceInfo(serial, int(local_port or 0))
+            dev_info.ready = False
+            dev_info.running = False
+            dev_info.error = f"设备流初始化异常: {exc}"
+
+            for sock in (video_sock, ctrl_sock):
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+            if proc:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+            if local_port:
+                self._release_port(local_port)
+
+            with self._lock:
+                self._devices[serial] = dev_info
+        finally:
+            with self._lock:
+                self._connecting.discard(serial)
 
 
     def _on_device_disconnected(self, serial: str):
@@ -752,7 +795,19 @@ class ScrcpyDeviceManager:
                 dev_info.input_queues.remove(client_queue)
             logger.info(f"客户端退出视频流: {serial}")
 
-    def send_touch_event(self, serial: str, action: int, x: int, y: int):
+    def _send_adb_touch_event(self, serial: str, action: int, x: int, y: int) -> None:
+        adb = adbutils.AdbClient()
+        device = adb.device(serial)
+        if action == ANDROID_MOTION_EVENT_ACTION_MOVE:
+            # move 事件需要成对 down/move/up，这里仅保留 no-op 兜底，优先依赖 control socket。
+            return
+        if action == ANDROID_MOTION_EVENT_ACTION_UP:
+            return
+        if action == ANDROID_MOTION_EVENT_ACTION_DOWN:
+            # 按下+抬起 = tap
+            device.shell(f"input tap {int(x)} {int(y)}")
+
+    def send_touch_event(self, serial: str, action: int, x: int, y: int, *, method: str = "scrcpy"):
         """
         向设备发送触控事件。
 
@@ -770,6 +825,17 @@ class ScrcpyDeviceManager:
         screen_height = max(1, int(dev_info.screen_height or 0))
         clamped_x = min(screen_width - 1, max(0, int(x)))
         clamped_y = min(screen_height - 1, max(0, int(y)))
+        input_method = str(method or "scrcpy").strip().lower()
+
+        if input_method == "adb":
+            try:
+                self._send_adb_touch_event(serial, action, clamped_x, clamped_y)
+                return
+            except Exception as e:
+                logger.error(f"ADB 触控事件发送失败: {e}")
+                raise
+        if input_method not in ("scrcpy", "control"):
+            raise ValueError(f"不支持的触控注入方式: {method}")
 
         control_sock = dev_info.control_socket
         if control_sock:
@@ -824,16 +890,7 @@ class ScrcpyDeviceManager:
 
         # 兜底通过 adb shell 发送 input 事件
         try:
-            adb = adbutils.AdbClient()
-            device = adb.device(serial)
-            if action == ANDROID_MOTION_EVENT_ACTION_MOVE:
-                # move 事件需要成对 down/move/up，这里仅保留 no-op 兜底，优先依赖 control socket。
-                return
-            if action == ANDROID_MOTION_EVENT_ACTION_UP:
-                return
-            if action == ANDROID_MOTION_EVENT_ACTION_DOWN:
-                # 按下+抬起 = tap
-                device.shell(f"input tap {clamped_x} {clamped_y}")
+            self._send_adb_touch_event(serial, action, clamped_x, clamped_y)
         except Exception as e:
             logger.error(f"触控事件发送失败: {e}")
             raise
@@ -900,6 +957,11 @@ class ScrcpyDeviceManager:
     def reconnect_device(self, serial: str):
         """清理旧连接，重新初始化设备"""
         with self._lock:
+            if serial in self._connecting:
+                if serial not in self._devices:
+                    self._devices[serial] = DeviceInfo(serial, 0)
+                logger.info("设备 %s 正在初始化投屏通道，跳过重复重连", serial)
+                return
             self._cleanup_device(serial)
         logger.info(f"设备 {serial} 准备重连...")
         threading.Thread(

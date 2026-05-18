@@ -187,8 +187,15 @@ export default {
     getDevice(serial) {
         return api.get(`/stream/devices/${serial}`)
     },
-    sendTouch(serial, action, x, y) {
-        return api.post(`/stream/devices/${serial}/touch`, { action, x, y })
+    reconnectDeviceStream(serial) {
+        return api.post(`/stream/devices/${serial}/reconnect`)
+    },
+    sendTouch(serial, action, x, y, options = {}) {
+        const payload = { action, x, y }
+        if (options.method) {
+            payload.method = options.method
+        }
+        return api.post(`/stream/devices/${serial}/touch`, payload)
     },
 
     // Reports

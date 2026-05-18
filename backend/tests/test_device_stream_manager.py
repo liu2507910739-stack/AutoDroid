@@ -1,17 +1,36 @@
 import unittest
 from queue import Queue
+from unittest.mock import patch
 
 from backend.device_stream.manager import (
     ANDROID_MOTION_EVENT_ACTION_DOWN,
     SCRCPY_CONTROL_MSG_TYPE_INJECT_TOUCH_EVENT,
     SCRCPY_POINTER_ID_GENERIC_FINGER,
     DeviceInfo,
+    ScrcpyDeviceManager,
     _build_touch_control_packet,
     _collect_h264_nal_types,
     _get_h264_init_packets,
     _offer_video_packet,
     _update_h264_init_cache,
 )
+
+
+class _FakeAdbDevice:
+    def __init__(self):
+        self.shell_calls = []
+
+    def shell(self, command):
+        self.shell_calls.append(command)
+        return ""
+
+
+class _FakeAdbClient:
+    def __init__(self, device):
+        self._device = device
+
+    def device(self, serial):
+        return self._device
 
 
 class DeviceStreamManagerCacheTests(unittest.TestCase):
@@ -97,6 +116,53 @@ class DeviceStreamManagerCacheTests(unittest.TestCase):
         self.assertEqual(int.from_bytes(packet[18:20], "big"), 1080)
         self.assertEqual(int.from_bytes(packet[20:22], "big"), 1920)
         self.assertEqual(int.from_bytes(packet[22:24], "big"), 0xFFFF)
+
+
+class DeviceStreamManagerInitializationTests(unittest.TestCase):
+    def test_connection_exception_is_visible_in_device_status(self):
+        manager = ScrcpyDeviceManager()
+
+        with patch(
+            "backend.device_stream.manager.adbutils.AdbClient",
+            side_effect=RuntimeError("adb unavailable"),
+        ):
+            manager._on_device_connected("serial-1")
+
+        devices = manager.get_devices_list()
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0]["serial"], "serial-1")
+        self.assertFalse(devices[0]["ready"])
+        self.assertIn("adb unavailable", devices[0]["error"])
+
+    def test_reconnect_does_not_clear_in_progress_status(self):
+        manager = ScrcpyDeviceManager()
+        manager._connecting.add("serial-1")
+
+        manager.reconnect_device("serial-1")
+
+        devices = manager.get_devices_list()
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0]["serial"], "serial-1")
+        self.assertFalse(devices[0]["ready"])
+        self.assertIsNone(devices[0]["error"])
+        self.assertIn("serial-1", manager._connecting)
+
+    def test_adb_touch_method_sends_clamped_tap(self):
+        manager = ScrcpyDeviceManager()
+        dev_info = DeviceInfo("serial-1", 27183)
+        dev_info.ready = True
+        dev_info.screen_width = 100
+        dev_info.screen_height = 200
+        manager._devices["serial-1"] = dev_info
+        adb_device = _FakeAdbDevice()
+
+        with patch(
+            "backend.device_stream.manager.adbutils.AdbClient",
+            return_value=_FakeAdbClient(adb_device),
+        ):
+            manager.send_touch_event("serial-1", ANDROID_MOTION_EVENT_ACTION_DOWN, 150, -20, method="adb")
+
+        self.assertEqual(adb_device.shell_calls, ["input tap 99 0"])
 
 
 if __name__ == "__main__":
