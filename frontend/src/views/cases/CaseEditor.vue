@@ -9,12 +9,15 @@ import GeneralStepsPanel from '@/components/GeneralStepsPanel.vue'
 import { useCaseStore } from '@/stores/useCaseStore'
 import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import api from '@/api'
 
 const route = useRoute()
 const router = useRouter()
 const caseStore = useCaseStore()
-const { currentCase, loading } = storeToRefs(caseStore)
+const { currentCase, loading, hasUnsavedChanges } = storeToRefs(caseStore)
+
+useUnsavedGuard(hasUnsavedChanges)
 
 const logConsoleRef = ref(null)
 const deviceStageRef = ref(null)
@@ -29,6 +32,10 @@ const ocrCropMode = computed(() => {
 
 const activeImageCropStepUuid = computed(() => {
   return deviceStageRef.value?.activeImageCropStepUuid?.value || ''
+})
+
+const recordMode = computed(() => {
+  return deviceStageRef.value?.syncMode ?? true
 })
 
 const initData = async () => {
@@ -287,6 +294,7 @@ onMounted(() => {
           :loading="loading"
           :device-serial="recordingDeviceSerial"
           :ocr-crop-mode="ocrCropMode"
+          :record-mode="recordMode"
           @action-start="loading = true"
           @action-end="loading = false"
           @refresh-needed="handleRefreshNeeded"

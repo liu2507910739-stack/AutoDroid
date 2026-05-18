@@ -135,6 +135,37 @@ const handleCurrentChange = (val) => { currentPage.value = val; fetchData() }
 const handleView = (id) => { router.push(`/execution/reports/${id}`) }
 const handleDownload = (item) => { window.open(api.getReportDownloadUrl(item.id), '_blank') }
 
+const handleDeleteExecution = async (executionId) => {
+    try {
+        await ElMessageBox.confirm('确定删除该条执行记录？相关截图和报告文件也将被删除。', '警告', {
+            type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
+        })
+        await api.deleteExecution(executionId)
+        ElMessage.success('已删除')
+        fetchData()
+    } catch (err) {
+        if (err !== 'cancel') ElMessage.error('删除失败')
+    }
+}
+
+const handleDeleteBatch = async (row) => {
+    if (row.batch_id.startsWith('single_')) {
+        return handleDeleteExecution(row.executions[0].id)
+    }
+    try {
+        await ElMessageBox.confirm(
+            `确定删除批次「${row.batch_name}」的所有执行记录（${row.executions.length} 条）？相关截图和报告文件也将被删除。`,
+            '警告',
+            { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+        )
+        await api.deleteBatch(row.batch_id)
+        ElMessage.success('已删除')
+        fetchData()
+    } catch (err) {
+        if (err !== 'cancel') ElMessage.error('删除失败')
+    }
+}
+
 const formatDate = (date) => {
     if (!date) return '-'
     return dayjs(date).format('MM-DD HH:mm:ss')
@@ -357,6 +388,8 @@ onUnmounted(() => {
                                                     <el-button link type="primary" @click="handleView(subRow.id)" size="small">查看记录单</el-button>
                                                     <el-divider direction="vertical" />
                                                     <el-button link type="primary" @click="handleDownload(subRow)" size="small">下载</el-button>
+                                                    <el-divider direction="vertical" />
+                                                    <el-button link type="danger" @click="handleDeleteExecution(subRow.id)" size="small" :disabled="subRow.status === 'RUNNING'">删除</el-button>
                                                 </template>
                                             </el-table-column>
                                         </el-table>
@@ -398,6 +431,12 @@ onUnmounted(() => {
                             <el-table-column label="触发人" width="120">
                                 <template #default="{ row }">
                                     <span style="color: #606266;">{{ row.executor_name || '-' }}</span>
+                                </template>
+                            </el-table-column>
+
+                            <el-table-column label="操作" width="80" align="center">
+                                <template #default="{ row }">
+                                    <el-button :icon="Delete" link type="danger" @click.stop="handleDeleteBatch(row)" :disabled="row.status === 'RUNNING'" />
                                 </template>
                             </el-table-column>
                         </el-table>

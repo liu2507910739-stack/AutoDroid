@@ -368,7 +368,7 @@ export const useCaseStore = defineStore('case', () => {
     // State
     const currentCase = ref({
         id: null,
-        name: 'New Test Case',
+        name: '未命名用例',
         variables: [],
         steps: []
     })
@@ -377,10 +377,24 @@ export const useCaseStore = defineStore('case', () => {
     const loading = ref(false)
     const running = ref(false)
     const lastAddedStepUuid = ref(null)
+    const savedSnapshot = ref(null)
+
+    function takeSnapshot() {
+        return JSON.stringify({
+            name: currentCase.value.name,
+            steps: currentCase.value.steps,
+            variables: currentCase.value.variables
+        })
+    }
+
+    function updateSnapshot() {
+        savedSnapshot.value = takeSnapshot()
+    }
 
     // Getters
     const hasUnsavedChanges = computed(() => {
-        return currentCase.value.id === null
+        if (savedSnapshot.value === null) return false
+        return takeSnapshot() !== savedSnapshot.value
     })
 
     // Actions
@@ -420,6 +434,7 @@ export const useCaseStore = defineStore('case', () => {
                 variables: normalizeVariablePlaceholders(caseData.variables || []),
                 steps: uiSteps
             }
+            updateSnapshot()
             ElMessage.success('用例已加载')
         } catch (err) {
             ElMessage.error('加载用例失败: ' + err.message)
@@ -468,6 +483,7 @@ export const useCaseStore = defineStore('case', () => {
                 ...savedCase,
                 steps: finalSteps
             }
+            updateSnapshot()
             ElMessage.success('保存成功')
             await fetchCaseList()
         } catch (err) {
@@ -518,11 +534,12 @@ export const useCaseStore = defineStore('case', () => {
         lastAddedStepUuid.value = null
         currentCase.value = {
             id: null,
-            name: 'New Test Case',
+            name: '未命名用例',
             variables: [],
             steps: [],
             folder_id: opts.folder_id || null
         }
+        updateSnapshot()
     }
 
     return {
