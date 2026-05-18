@@ -51,6 +51,7 @@ STATIC_DIR = PROJECT_ROOT / "static"
 FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
 FRONTEND_INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
 REPORT_ASSET_API_PREFIX = "/api/report-assets"
+REPORT_ASSET_DEV_PREFIX = "/report-assets"
 REPORT_API_RESERVED_SEGMENTS = {"executions", "dashboard"}
 SPA_EXCLUDED_PREFIXES = (
     "api",
@@ -69,6 +70,7 @@ SPA_EXCLUDED_PREFIXES = (
     "redoc",
     "openapi.json",
     "static",
+    "report-assets",
 )
 RECORDING_IOS_IDLE_TTL_SECONDS = 45.0
 
@@ -232,6 +234,7 @@ api_router = APIRouter(prefix="/api")
 # Mount reports directory for canonical static asset access
 REPORTS_DIR.mkdir(exist_ok=True)
 app.mount(REPORT_ASSET_API_PREFIX, StaticFiles(directory=str(REPORTS_DIR)), name="report_assets")
+app.mount(REPORT_ASSET_DEV_PREFIX, StaticFiles(directory=str(REPORTS_DIR)), name="report_assets_dev")
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

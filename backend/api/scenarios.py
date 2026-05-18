@@ -166,6 +166,8 @@ def _persist_step_screenshot(
     payload = str(screenshot_b64 or "").strip()
     if not payload:
         return None
+    if payload.lower().startswith("data:") and "," in payload:
+        payload = payload.split(",", 1)[1].strip()
 
     try:
         raw_png = base64.b64decode(payload)

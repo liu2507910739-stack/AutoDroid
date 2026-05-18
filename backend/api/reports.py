@@ -10,8 +10,10 @@ from pydantic import BaseModel
 from backend.scheduler_service import SchedulerService
 
 from backend.utils.pydantic_compat import dump_model
+from backend.paths import project_path, project_relative_path
 
 router = APIRouter()
+REPORT_ASSET_ANCHORS = ("reports", "screenshots", "fastbot")
 
 # --- Schemas for Response ---
 
@@ -125,6 +127,37 @@ class DashboardOverview(BaseModel):
 
 ALERT_FAIL_STATUSES = {"FAIL", "WARNING", "ERROR"}
 COMPLETED_STATUSES = {"PASS", "FAIL", "WARNING", "ERROR"}
+
+
+def _normalize_report_asset_path(path: Optional[str]) -> Optional[str]:
+    raw_path = str(path or "").strip()
+    if not raw_path:
+        return None
+
+    normalized = project_relative_path(raw_path, anchors=REPORT_ASSET_ANCHORS)
+    normalized = str(normalized or "").strip().replace("\\", "/").lstrip("/")
+    if normalized == "reports":
+        return None
+    if normalized.startswith("reports/"):
+        normalized = normalized[len("reports/") :]
+    segments = [segment for segment in normalized.split("/") if segment]
+    if any(segment == ".." for segment in segments):
+        return None
+    return "/".join(segments) or None
+
+
+def _resolve_report_asset_file(path: Optional[str]) -> Optional[str]:
+    normalized = _normalize_report_asset_path(path)
+    if not normalized:
+        return None
+
+    reports_root = project_path("reports").resolve()
+    candidate = (reports_root / normalized).resolve()
+    try:
+        candidate.relative_to(reports_root)
+    except ValueError:
+        return None
+    return str(candidate)
 
 
 def _dashboard_window_start(range_key: str, now: datetime) -> datetime:
@@ -567,7 +600,11 @@ def get_report_detail(execution_id: int, session: Session = Depends(get_session)
     # Get steps
     steps = session.exec(select(TestResult).where(TestResult.execution_id == execution_id).order_by(TestResult.step_order)).all()
     
-    steps_read = [TestResultRead(**dump_model(s)) for s in steps]
+    steps_read = []
+    for step in steps:
+        step_data = dump_model(step)
+        step_data["screenshot_path"] = _normalize_report_asset_path(step_data.get("screenshot_path"))
+        steps_read.append(TestResultRead(**step_data))
     
     detail = TestExecutionDetail(**dump_model(execution))
     detail.steps = steps_read
@@ -663,22 +700,15 @@ def download_report(execution_id: int, session: Session = Depends(get_session)):
     # 2. Fallback: Generate report from DB records
     steps = session.exec(select(TestResult).where(TestResult.execution_id == execution_id).order_by(TestResult.step_order)).all()
 
-    # Use absolute path based on this file's location to find reports dir
-    # backend/api/reports.py -> backend/api -> backend -> project_root
-    current_file = os.path.abspath(__file__)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-    reports_dir = os.path.join(project_root, "reports")
-    
     steps_results = []
 
     for step in steps:
         # Load screenshot as base64 if exists
         b64_img = None
         if step.screenshot_path:
-            # step.screenshot_path e.g. "screenshots/exec_37_step_9.png"
-            full_path = os.path.join(reports_dir, step.screenshot_path)
+            full_path = _resolve_report_asset_file(step.screenshot_path)
             
-            if os.path.exists(full_path):
+            if full_path and os.path.exists(full_path):
                  try:
                     with open(full_path, "rb") as image_file:
                         encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
