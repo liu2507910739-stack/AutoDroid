@@ -34,6 +34,7 @@ const environments = ref([])
 
 // Unsaved changes tracking
 const savedSnapshot = ref(null)
+const isSaving = ref(false)
 
 function takeSnapshot() {
     return JSON.stringify({
@@ -47,6 +48,7 @@ function updateSnapshot() {
 }
 
 const isDirty = computed(() => {
+    if (isSaving.value) return false
     if (savedSnapshot.value === null) return false
     return takeSnapshot() !== savedSnapshot.value
 })
@@ -177,18 +179,17 @@ const saveSteps = async () => {
   }
 
   loading.value = true
+  isSaving.value = true
   try {
     let targetId = scenarioId.value
-    
+
     // Create if new
     if (!targetId) {
          const res = await api.createScenario({ name: currentScenario.value.name })
          targetId = res.data.id
-         // Update URL without reloading to keep state
          await router.replace(`/ui/scenarios/${targetId}/edit`)
          ElMessage.success('场景创建成功')
     } else {
-         // Update Name
          await api.updateScenario(targetId, { name: currentScenario.value.name })
     }
 
@@ -197,13 +198,14 @@ const saveSteps = async () => {
       order: index + 1,
       alias: step.alias || step.name
     }))
-    
+
     await api.updateScenarioSteps(targetId, payload)
     updateSnapshot()
     ElMessage.success('保存成功')
   } catch (err) {
     ElMessage.error('保存失败: ' + err.message)
   } finally {
+    isSaving.value = false
     loading.value = false
   }
 }
