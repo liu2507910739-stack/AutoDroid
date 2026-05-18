@@ -286,6 +286,7 @@ api_router.include_router(
     include_in_schema=True,
 )
 app.include_router(stream_rest_router, prefix="/api", include_in_schema=False)
+app.include_router(stream_rest_router, prefix="/stream", include_in_schema=False)
 app.include_router(stream_rest_router, include_in_schema=False)
 app.include_router(stream_ws_router)
 app.include_router(api_router)

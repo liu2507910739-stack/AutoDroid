@@ -44,13 +44,14 @@ class TouchEvent(BaseModel):
     action: int = 0  # 兼容语义：0=tap, 1=抬起, 2=移动
     x: int
     y: int
+    method: str = "scrcpy"  # scrcpy=control socket, adb=adb shell input tap
 
 
 @rest_router.post("/devices/{serial}/touch")
 def send_touch(serial: str, event: TouchEvent):
     """向设备发送触控事件"""
     try:
-        device_manager.send_touch_event(serial, event.action, event.x, event.y)
+        device_manager.send_touch_event(serial, event.action, event.x, event.y, method=event.method)
         return {"status": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

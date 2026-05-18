@@ -61,7 +61,13 @@ const selectedStreamDevice = computed(() =>
   streamDevices.value.find(d => d.serial === selectedSerial.value) || null
 )
 const isSelectedStreamReady = computed(() => Boolean(selectedStreamDevice.value?.ready))
-const selectedStreamError = computed(() => String(selectedStreamDevice.value?.error || '').trim())
+const liveStreamReconnectInFlight = ref(false)
+const liveStreamReconnectError = ref('')
+const selectedStreamError = computed(() => String(selectedStreamDevice.value?.error || liveStreamReconnectError.value || '').trim())
+const selectedStreamPendingText = computed(() => {
+  if (liveStreamReconnectInFlight.value) return '正在重建投屏通道，请稍候...'
+  return selectedStreamError.value || '投屏通道初始化中，请稍候...'
+})
 const hierarchyHash = ref('')
 const liveHierarchyStatus = ref('idle')
 const liveHierarchyError = ref('')
@@ -97,6 +103,7 @@ const ANDROID_LIVE_PREVIEW_POLL_IDLE_MS = 700
 const ANDROID_LIVE_PREVIEW_POLL_ACTIVE_MS = 300
 const LIVE_PREVIEW_BUSY_POLL_MS = 1800
 const LIVE_PREVIEW_POLL_ACTIVE_WINDOW_MS = 2500
+const LIVE_STREAM_RECONNECT_RETRY_MS = 8000
 
 const getErrorDetail = (err, fallback = '操作失败') => {
   return err?.response?.data?.detail || err?.message || fallback
@@ -994,7 +1001,7 @@ const fetchDump = async () => {
 
 
 // 获取设备列表
-const fetchDevices = async () => {
+const fetchDevices = async ({ ensureStream = true } = {}) => {
   if (!isStageActive) return
   try {
     const [deviceRes, streamRes] = await Promise.all([
@@ -1018,6 +1025,12 @@ const fetchDevices = async () => {
     if (!selectedValid) {
       selectedSerial.value = fallbackDevice ? fallbackDevice.serial : ''
     }
+    if (selectedStreamDevice.value) {
+      liveStreamReconnectError.value = ''
+    }
+    if (ensureStream) {
+      ensureLiveStreamChannel({ refreshAfter: false })
+    }
   } catch (err) {
     console.error('获取设备列表失败:', err)
   }
@@ -1027,6 +1040,8 @@ let liveStreamPollTimer = null
 let livePreviewPollTimer = null
 let iosLivePreviewLightDumpCount = 0
 let livePreviewBoostUntil = 0
+let lastLiveStreamReconnectAt = 0
+let lastLiveStreamReconnectSerial = ''
 let isStageActive = true
 const activeDumpControllers = new Set()
 
@@ -1109,6 +1124,43 @@ const stopLiveStreamPolling = () => {
   liveStreamPollTimer = null
 }
 
+const shouldEnsureLiveStreamChannel = ({ force = false } = {}) => {
+  if (!isStageActive || !liveMode.value || !selectedSerial.value || isIosLivePreview.value) return false
+  if (!force && isSelectedStreamReady.value) return false
+  const streamDevice = selectedStreamDevice.value
+  return Boolean(force || !streamDevice || streamDevice.error)
+}
+
+const ensureLiveStreamChannel = async ({ force = false, refreshAfter = true } = {}) => {
+  if (!shouldEnsureLiveStreamChannel({ force }) || liveStreamReconnectInFlight.value) return false
+  const serial = selectedSerial.value
+  const now = Date.now()
+  const recentlyRetried = lastLiveStreamReconnectSerial === serial
+    && now - lastLiveStreamReconnectAt < LIVE_STREAM_RECONNECT_RETRY_MS
+  if (!force && recentlyRetried) return false
+
+  lastLiveStreamReconnectSerial = serial
+  lastLiveStreamReconnectAt = now
+  liveStreamReconnectInFlight.value = true
+  liveStreamReconnectError.value = ''
+  try {
+    await api.reconnectDeviceStream(serial)
+    if (refreshAfter) {
+      await fetchDevices({ ensureStream: false })
+    }
+    return true
+  } catch (err) {
+    liveStreamReconnectError.value = getErrorDetail(err, '投屏通道重建失败')
+    return false
+  } finally {
+    liveStreamReconnectInFlight.value = false
+  }
+}
+
+const retryLiveStreamChannel = async () => {
+  await ensureLiveStreamChannel({ force: true, refreshAfter: true })
+}
+
 const shouldPauseLivePreviewPolling = computed(() => {
   return Boolean(
     loading.value
@@ -1184,6 +1236,7 @@ const onDeviceChange = async () => {
   // 先刷新设备列表,获取最新状态
   clearQuickImagePrompt()
   cancelQuickImageCapture()
+  liveStreamReconnectError.value = ''
   hierarchyXml.value = ''
   hierarchyHash.value = ''
   nodes.value = []
@@ -1238,6 +1291,7 @@ watch(liveMode, async (val) => {
     stopLiveStreamPolling()
     stopLivePreviewPolling()
     livePreviewBoostUntil = 0
+    liveStreamReconnectError.value = ''
     if (skipNextStaticDump.value) {
       skipNextStaticDump.value = false
     } else if (selectedSerial.value) {
@@ -1289,7 +1343,14 @@ const parseResolution = (resolution) => {
   }
 }
 
-const selectedDeviceScreenSize = computed(() => parseResolution(selectedDevice.value?.resolution))
+const selectedDeviceScreenSize = computed(() => {
+  const size = parseResolution(selectedDevice.value?.resolution)
+  if (size.width > 0 && size.height > 0) return size
+  return {
+    width: Number(selectedStreamDevice.value?.screen_width) || 0,
+    height: Number(selectedStreamDevice.value?.screen_height) || 0
+  }
+})
 
 // 投屏模式下获取 UI 层级（用于元素高亮）
 const fetchLiveHierarchy = async ({ showLoading = false, forceHierarchy = false } = {}) => {
@@ -1347,7 +1408,7 @@ const onScrcpyTouch = async ({ x, y, relX, relY }) => {
 
   if (!syncMode.value) {
     try {
-      await api.sendTouch(selectedSerial.value, 0, x, y)
+      await api.sendTouch(selectedSerial.value, 0, x, y, { method: 'adb' })
       liveHierarchyStatus.value = 'syncing'
       liveHierarchyError.value = ''
       bumpLivePreviewPollingBoost()
@@ -1415,6 +1476,10 @@ onMounted(async () => {
 
 onActivated(() => {
   isStageActive = true
+  if (liveMode.value) {
+    startLiveStreamPolling()
+    fetchDevices()
+  }
   syncLivePreviewPolling({ immediate: Boolean(liveMode.value && selectedSerial.value) })
 })
 
@@ -1583,8 +1648,8 @@ defineExpose({
         :image-size="80"
       />
       <div v-else class="live-pending">
-        <p>{{ selectedStreamError || '投屏通道初始化中，请稍候...' }}</p>
-        <el-button size="small" @click="fetchDevices">刷新设备状态</el-button>
+        <p>{{ selectedStreamPendingText }}</p>
+        <el-button size="small" :loading="liveStreamReconnectInFlight" @click="retryLiveStreamChannel">重试投屏通道</el-button>
       </div>
     </div>
 
