@@ -1479,9 +1479,10 @@ defineExpose({
   connectedDevices,
   startOcrCrop,
   startImageCrop,
-  ocrCropMode,  // 暴露 OCR 框选模式状态
-  imageCropMode,  // 暴露图像截取框选模式状态
-  activeImageCropStepUuid
+  ocrCropMode,
+  imageCropMode,
+  activeImageCropStepUuid,
+  syncMode
 })
 </script>
 

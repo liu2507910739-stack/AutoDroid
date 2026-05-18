@@ -210,6 +210,12 @@ export default {
     getDashboardOverview(params) {
         return api.get('/reports/dashboard/overview', { params })
     },
+    deleteExecution(id) {
+        return api.delete(`/reports/executions/${id}`)
+    },
+    deleteBatch(batchId) {
+        return api.delete(`/reports/batch/${batchId}`)
+    },
 
     // Tasks (定时任务)
     getTasks() {

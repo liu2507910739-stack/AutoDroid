@@ -724,7 +724,70 @@ def download_report(execution_id: int, session: Session = Depends(get_session)):
     # Return the new file
     report_path = report_generator.get_report_path(report_id)
     return FileResponse(
-        path=report_path, 
-        filename=report_id, 
+        path=report_path,
+        filename=report_id,
         media_type="text/html"
     )
+
+
+def _get_reports_dir():
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    return os.path.join(project_root, "reports")
+
+
+def _delete_execution_artifacts(execution: TestExecution, results):
+    reports_dir = _get_reports_dir()
+    if execution.report_id:
+        report_path = os.path.join(reports_dir, execution.report_id)
+        if os.path.exists(report_path):
+            os.remove(report_path)
+    for result in results:
+        if result.screenshot_path:
+            full_path = os.path.join(reports_dir, result.screenshot_path)
+            if os.path.exists(full_path):
+                os.remove(full_path)
+
+
+@router.delete("/executions/{execution_id}")
+def delete_execution(execution_id: int, session: Session = Depends(get_session)):
+    execution = session.get(TestExecution, execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="执行记录不存在")
+    if execution.status == "RUNNING":
+        raise HTTPException(status_code=400, detail="运行中的记录无法删除")
+
+    results = session.exec(
+        select(TestResult).where(TestResult.execution_id == execution_id)
+    ).all()
+    _delete_execution_artifacts(execution, results)
+    for result in results:
+        session.delete(result)
+    session.delete(execution)
+    session.commit()
+    return {"success": True}
+
+
+@router.delete("/batch/{batch_id}")
+def delete_batch(batch_id: str, session: Session = Depends(get_session)):
+    executions = session.exec(
+        select(TestExecution).where(TestExecution.batch_id == batch_id)
+    ).all()
+    if not executions:
+        raise HTTPException(status_code=404, detail="批次不存在")
+
+    running = [e for e in executions if e.status == "RUNNING"]
+    if running:
+        raise HTTPException(status_code=400, detail="批次中存在运行中的记录，无法删除")
+
+    for execution in executions:
+        results = session.exec(
+            select(TestResult).where(TestResult.execution_id == execution.id)
+        ).all()
+        _delete_execution_artifacts(execution, results)
+        for result in results:
+            session.delete(result)
+        session.delete(execution)
+
+    session.commit()
+    return {"success": True}

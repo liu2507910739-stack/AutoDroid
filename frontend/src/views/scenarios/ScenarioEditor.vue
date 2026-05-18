@@ -4,13 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { VueDraggable } from 'vue-draggable-plus'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { 
-  VideoPlay, Delete, Rank, Document, 
+import {
+  VideoPlay, Delete, Rank, Document,
   Search, Upload, ArrowLeft, FolderOpened
 } from '@element-plus/icons-vue'
 import LogConsole from '@/components/LogConsole.vue'
 import { createUuid } from '@/utils/uuid'
 import { ACTION_LABELS, getActionLabel, getActionColor } from '@/utils/actionConstants'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +31,27 @@ const logConsoleRef = ref(null)
 
 const envId = ref(null)
 const environments = ref([])
+
+// Unsaved changes tracking
+const savedSnapshot = ref(null)
+
+function takeSnapshot() {
+    return JSON.stringify({
+        name: currentScenario.value.name,
+        steps: scenarioSteps.value.map(s => ({ id: s.id, alias: s.alias }))
+    })
+}
+
+function updateSnapshot() {
+    savedSnapshot.value = takeSnapshot()
+}
+
+const isDirty = computed(() => {
+    if (savedSnapshot.value === null) return false
+    return takeSnapshot() !== savedSnapshot.value
+})
+
+useUnsavedGuard(isDirty)
 
 const caseTreeProps = {
     children: 'children',
@@ -78,6 +100,7 @@ onMounted(async () => {
         currentScenario.value = { name: `新建场景 ${new Date().toLocaleDateString()}` }
         fetchCases()
     }
+    updateSnapshot()
     fetchEnvironments()
 })
 
@@ -176,6 +199,7 @@ const saveSteps = async () => {
     }))
     
     await api.updateScenarioSteps(targetId, payload)
+    updateSnapshot()
     ElMessage.success('保存成功')
   } catch (err) {
     ElMessage.error('保存失败: ' + err.message)

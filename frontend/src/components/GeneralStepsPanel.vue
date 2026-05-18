@@ -1,9 +1,10 @@
 <script setup>
-import { computed, markRaw, ref } from 'vue'
+import { computed, markRaw, ref, watch } from 'vue'
 import { VideoPlay, Close, Back, House, Timer, Top, Bottom, Rank } from '@element-plus/icons-vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import api from '@/api'
 import { useCaseStore } from '@/stores/useCaseStore'
+import { storeToRefs } from 'pinia'
 import { ElMessage } from 'element-plus'
 import { createUuid } from '@/utils/uuid'
 import { ACTION_LABELS } from '@/utils/actionConstants'
@@ -14,18 +15,38 @@ const props = defineProps({
   deviceSerial: {
     type: String,
     default: ''
+  },
+  recordMode: {
+    type: Boolean,
+    default: true
   }
 })
 
 const caseStore = useCaseStore()
-const packageName = ref('com.ehaier.zgq.shop.mall')
+const { currentCase } = storeToRefs(caseStore)
+const DEFAULT_PACKAGE = 'com.ehaier.zgq.shop.mall'
+const packageName = ref(DEFAULT_PACKAGE)
 const emit = defineEmits(['action-start', 'action-end', 'refresh-needed'])
 const hasSelectedDevice = computed(() => !!props.deviceSerial)
 
+// Sync packageName from case steps (override default if case has app steps)
+watch(() => currentCase.value.steps, (steps) => {
+  if (!steps || !steps.length) {
+    packageName.value = DEFAULT_PACKAGE
+    return
+  }
+  const appStep = steps.find(s => s.action === 'start_app' || s.action === 'stop_app')
+  if (appStep && appStep.selector) {
+    packageName.value = appStep.selector
+  } else {
+    packageName.value = DEFAULT_PACKAGE
+  }
+}, { immediate: true })
+
 // Pre-defined draggable steps
 const draggableSteps = ref([
-  { action: 'start_app', selector: 'com.ehaier.zgq.shop.mall', description: ACTION_LABELS.start_app, icon: markRaw(VideoPlay) },
-  { action: 'stop_app', selector: 'com.ehaier.zgq.shop.mall', description: ACTION_LABELS.stop_app, icon: markRaw(Close) },
+  { action: 'start_app', selector: '', description: ACTION_LABELS.start_app, icon: markRaw(VideoPlay) },
+  { action: 'stop_app', selector: '', description: ACTION_LABELS.stop_app, icon: markRaw(Close) },
   { action: 'back', selector: '', description: ACTION_LABELS.back, icon: markRaw(Back) },
   { action: 'home', selector: '', description: ACTION_LABELS.home, icon: markRaw(House) },
   { action: 'swipe', selector: 'up', description: '上滑', icon: markRaw(Top) },
@@ -35,10 +56,13 @@ const draggableSteps = ref([
 ])
 
 const handleClone = (item) => {
+  const selector = (item.action === 'start_app' || item.action === 'stop_app')
+    ? packageName.value
+    : item.selector
   return {
     uuid: createUuid(),
     action: item.action,
-    selector: item.selector,
+    selector,
     selector_type: 'text',
     value: item.value || '',
     description: item.description,
@@ -59,28 +83,23 @@ const executeAction = async (action, data = '') => {
     ElMessage.warning('请先选择一台调试设备')
     return
   }
-  
-  // Specific checks
-  if (action === 'start_app' && !packageName.value) {
-    ElMessage.warning('请输入包名')
-    return
-  }
-  if (action === 'stop_app' && !packageName.value) {
+
+  if ((action === 'start_app' || action === 'stop_app') && !packageName.value) {
     ElMessage.warning('请输入包名')
     return
   }
 
   const finalData = (action === 'start_app' || action === 'stop_app') ? packageName.value : data
-  
+
   emit('action-start')
   try {
-    const res = await api.interactDevice(0, 0, action, null, finalData, props.deviceSerial)
-    
-    if (res.data.step) {
+    const res = await api.interactDevice(0, 0, action, null, finalData, props.deviceSerial, props.recordMode)
+
+    if (props.recordMode && res.data.step) {
       caseStore.addStep(res.data.step)
-      ElMessage.success(`执行成功: ${action}`)
     }
-    emit('refresh-needed', res.data.dump) // Pass back new device state
+    ElMessage.success(`执行成功: ${action}`)
+    emit('refresh-needed', res.data.dump)
   } catch (err) {
     console.error(err)
     ElMessage.error('执行失败: ' + err.message)
