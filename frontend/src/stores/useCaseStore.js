@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
 import { createUuid } from '@/utils/uuid'
@@ -483,7 +483,9 @@ export const useCaseStore = defineStore('case', () => {
                 ...savedCase,
                 steps: finalSteps
             }
-            updateSnapshot()
+            // 延迟到 nextTick 拍快照，避免 StepBuilder 的 deep watcher
+            // 在 Vue 调度刷新时突变 steps 导致快照与实际状态不一致
+            nextTick(() => updateSnapshot())
             ElMessage.success('保存成功')
             await fetchCaseList()
         } catch (err) {
