@@ -1128,6 +1128,7 @@ const shouldEnsureLiveStreamChannel = ({ force = false } = {}) => {
   if (!isStageActive || !liveMode.value || !selectedSerial.value || isIosLivePreview.value) return false
   if (!force && isSelectedStreamReady.value) return false
   const streamDevice = selectedStreamDevice.value
+  if (streamDevice?.initializing) return false
   return Boolean(force || !streamDevice || streamDevice.error)
 }
 
