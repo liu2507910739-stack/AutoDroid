@@ -54,9 +54,9 @@ const status = ref('disconnected')
 const errorMsg = ref('')
 const fps = ref(0)
 const hoveredNode = ref(null)
-const LIVE_EDGE_CHECK_INTERVAL_MS = 500
-const LIVE_EDGE_MAX_LAG_SECONDS = 0.25
-const LIVE_EDGE_SEEK_OFFSET_SECONDS = 0.05
+const LIVE_EDGE_CHECK_INTERVAL_MS = 1000
+const LIVE_EDGE_MAX_LAG_SECONDS = 0.8
+const LIVE_EDGE_SEEK_OFFSET_SECONDS = 0.1
 
 let jmuxer = null
 let ws = null
@@ -233,7 +233,7 @@ function connect() {
   jmuxer = new JMuxer({
     node: videoRef.value,
     mode: 'video',
-    flushingTime: 0,
+    flushingTime: 100,
     fps: 60,
     debug: false
   })

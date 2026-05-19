@@ -365,7 +365,8 @@ class ScrcpyDeviceManager:
                 f"log_level=info tunnel_forward=true video=true control=true audio=false "
                 f"send_frame_meta=true "
                 f"max_size=1280 "
-                f"video_bit_rate=2000000"
+                f"video_bit_rate=4000000 "
+                f"i_frame_interval=1"
             )
             logger.info(f"启动 scrcpy: {scrcpy_cmd}")
             proc = subprocess.Popen(
@@ -766,7 +767,7 @@ class ScrcpyDeviceManager:
             raise ValueError(f"设备 {serial} 未就绪或不存在")
 
         # 创建客户端队列
-        client_queue = queue.Queue(maxsize=5)
+        client_queue = queue.Queue(maxsize=30)
         dev_info.input_queues.append(client_queue)
         logger.info(f"客户端加入视频流: {serial} (当前客户端数: {len(dev_info.input_queues)})")
 
