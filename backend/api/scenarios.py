@@ -25,6 +25,11 @@ from backend.schemas import (
 )
 from backend.api import deps
 from backend.step_contract import normalize_error_strategy, standard_step_to_legacy
+from backend.report_display import (
+    build_report_display,
+    normalize_step_payload_for_report,
+    storage_report_display,
+)
 import uuid
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -224,8 +229,10 @@ def _find_last_failed_step_name(
         for step in item.get("steps", []) or []:
             if step.get("status") != "failed":
                 continue
+            display = step.get("report_display") if isinstance(step.get("report_display"), dict) else {}
             step_desc = (
-                step.get("description")
+                display.get("display_text")
+                or step.get("description")
                 or step.get("selector")
                 or step.get("action")
                 or "未知操作"
@@ -299,13 +306,16 @@ def _persist_case_result_and_build_case_report(
     prefix = step_name_prefix or item.get("alias") or item.get("case_name") or "Unknown"
 
     for step_result in case_result.get("steps", []) or []:
-        step_payload = step_result.get("step", {}) or {}
+        step_payload = normalize_step_payload_for_report(step_result.get("step", {}) or {})
+        step_output = step_result.get("output") if isinstance(step_result.get("output"), dict) else None
+        display_payload = dict(step_payload)
+        if step_output:
+            display_payload["output"] = step_output
         step_duration = float(step_result.get("duration", 0) or 0)
         case_duration += step_duration
 
         ui_status = _step_ui_status(step_result)
         db_status = _ui_status_to_db_status(ui_status)
-        step_desc = step_payload.get("description") or f"{step_payload.get('action')} {step_payload.get('selector') or ''}"
 
         screenshot_b64 = str(step_result.get("screenshot") or "").strip() or None
         if not step_result.get("success") and not screenshot_b64 and error_screenshot is not None:
@@ -325,6 +335,14 @@ def _persist_case_result_and_build_case_report(
                 screenshot_b64=screenshot_b64,
             )
 
+        report_display = build_report_display(
+            display_payload,
+            screenshot_base64=screenshot_b64,
+            screenshot_path=screenshot_path,
+            include_preview_base64=True,
+        )
+        step_desc = report_display.get("display_text") or str(step_payload.get("action") or "未知操作")
+
         test_result = TestResult(
             execution_id=execution_id,
             step_name=f"[{prefix}] {step_desc}",
@@ -333,20 +351,21 @@ def _persist_case_result_and_build_case_report(
             duration=step_duration * 1000,
             error_message=step_result.get("error"),
             screenshot_path=screenshot_path,
+            report_display=storage_report_display(report_display),
         )
         session.add(test_result)
         if commit_per_step:
             session.commit()
 
         step_entry = {
+            **step_payload,
             "status": ui_status,
-            "action": step_payload.get("action"),
-            "description": step_payload.get("description"),
-            "selector": step_payload.get("selector"),
-            "selector_type": step_payload.get("selector_type"),
             "duration": round(step_duration, 2),
             "error": step_result.get("error"),
+            "report_display": report_display,
         }
+        if step_output:
+            step_entry["output"] = step_output
         if screenshot_b64:
             step_entry["screenshot"] = screenshot_b64
         formatted_steps.append(step_entry)
@@ -903,6 +922,8 @@ def _convert_cross_result_to_legacy_case_result(
         }
         if step_item.get("error"):
             converted["error"] = step_item.get("error")
+        if isinstance(step_item.get("output"), dict):
+            converted["output"] = step_item.get("output")
         if step_item.get("screenshot"):
             converted["screenshot"] = step_item.get("screenshot")
         if status == "WARNING":
@@ -1678,21 +1699,29 @@ def _handle_legacy_scenario_step_result(
 
     case_step = scenario_event.get("step")
     step_res = scenario_event.get("step_result") or {}
-    step_payload = step_res.get("step") or {}
+    step_payload = normalize_step_payload_for_report(step_res.get("step") or {})
+    case_step_payload = normalize_step_payload_for_report(case_step) if case_step is not None else {}
+    step_source = dict(case_step_payload)
+    for key, value in step_payload.items():
+        if value not in (None, ""):
+            step_source[key] = value
     step_duration = float(step_res.get("duration") or 0)
-    action_value = getattr(case_step, "action", None) or step_payload.get("action")
-    selector_value = getattr(case_step, "selector", None) or step_payload.get("selector")
-    description_value = getattr(case_step, "description", None) or step_payload.get("description")
-    selector_type_value = getattr(case_step, "selector_type", None) or step_payload.get("selector_type")
-    strategy = getattr(case_step, "error_strategy", None) or step_payload.get("error_strategy") or "ABORT"
+    action_value = step_source.get("action")
+    selector_value = step_source.get("selector")
+    description_value = step_source.get("description")
+    selector_type_value = step_source.get("selector_type")
+    strategy = step_source.get("error_strategy") or "ABORT"
     action_desc = f"{action_value} {selector_value or ''}".strip()
     step_log_entry = {
+        **step_source,
         "action": action_value,
         "description": description_value,
         "selector": selector_value,
         "selector_type": selector_type_value,
         "duration": round(step_duration, 2),
     }
+    if isinstance(step_res.get("output"), dict):
+        step_log_entry["output"] = step_res.get("output")
 
     screenshot_base64 = str(step_res.get("screenshot") or "").strip() or None
 
@@ -1725,16 +1754,26 @@ def _handle_legacy_scenario_step_result(
         step_log_entry["screenshot"] = screenshot_base64
         active_case["last_screenshot_base64"] = screenshot_base64
 
+    report_display = build_report_display(
+        step_log_entry,
+        screenshot_base64=screenshot_base64,
+        screenshot_path=screenshot_path,
+        include_preview_base64=True,
+    )
+    step_log_entry["report_display"] = report_display
+    display_text = report_display.get("display_text") or description_value or action_value or "未知操作"
+
     active_case["steps"].append(step_log_entry)
 
     test_result = TestResult(
         execution_id=execution_id,
-        step_name=f"[{active_case['step_name']}] {description_value or action_value}",
+        step_name=f"[{active_case['step_name']}] {display_text}",
         step_order=global_step_order,
         status=_ui_status_to_db_status(step_log_entry["status"]),
         duration=step_duration * 1000,
         error_message=step_res.get("error"),
         screenshot_path=screenshot_path,
+        report_display=storage_report_display(report_display),
     )
     session.add(test_result)
     if commit_per_step:
@@ -1743,7 +1782,7 @@ def _handle_legacy_scenario_step_result(
     event_info = {
         "type": "step_result",
         "status": step_log_entry["status"],
-        "action_desc": action_desc or action_value,
+        "action_desc": display_text or action_desc or action_value,
         "error": step_res.get("error"),
         "strategy": strategy,
         "step_log_entry": step_log_entry,
@@ -1937,7 +1976,8 @@ def _iter_cross_platform_event_infos(
             "duration": 0,
         }
         for step_entry in case_entry.get("steps", []) or []:
-            action_desc = step_entry.get("action") or step_entry.get("description") or "unknown"
+            display = step_entry.get("report_display") if isinstance(step_entry.get("report_display"), dict) else {}
+            action_desc = display.get("display_text") or step_entry.get("description") or step_entry.get("action") or "unknown"
             yield {
                 "type": "step_result",
                 "status": step_entry.get("status"),

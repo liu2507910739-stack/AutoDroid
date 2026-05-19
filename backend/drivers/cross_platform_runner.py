@@ -205,16 +205,17 @@ class TestCaseRunner:
                         "" if export_value is None else str(export_value)
                     )
 
-            return self._result(
+            result = self._result(
                 step_data=step_data,
                 action=action,
                 status="PASS",
                 error_strategy=strategy,
                 error=None,
                 output=dispatch_output,
-                artifacts=None,
+                artifacts=self._extract_step_artifacts(step_context),
                 duration=time.time() - started_at,
             )
+            return result
         except Exception as exc:
             return self._result(
                 step_data=step_data,

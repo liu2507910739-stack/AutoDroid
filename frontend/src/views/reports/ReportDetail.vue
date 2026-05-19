@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Monitor, Timer, User, Picture } from '@element-plus/icons-vue'
+import { ArrowLeft, Monitor, Timer, User, Picture, View } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
@@ -18,6 +18,7 @@ const cases = ref([])
 const activeCaseNames = ref([])
 const showScreenshot = ref(false)
 const currentScreenshot = ref('')
+const currentPreviewTitle = ref('步骤预览')
 const devices = ref([])
 
 // Methods
@@ -83,6 +84,36 @@ const formatStepMessage = (row) => {
         : row.error_message
 }
 
+const resolvePreviewUrl = (path) => {
+    const raw = String(path || '').trim()
+    if (!raw) return ''
+    if (raw.startsWith('data:image/')) return raw
+    if (raw.startsWith('/api/static/')) return raw
+    if (raw.startsWith('/static/')) return `/api${raw}`
+    if (raw.startsWith('static/')) return `/api/${raw}`
+    return api.getReportAssetUrl(raw)
+}
+
+const getStepPreviewPath = (row) => {
+    const display = row?.report_display || {}
+    return display.preview_type === 'template_image' ? (display.preview_path || '') : ''
+}
+
+const getStepPreviewLabel = (row) => {
+    const display = row?.report_display || {}
+    return display.preview_label || '图像预览'
+}
+
+const hasStepPreview = (row) => Boolean(getStepPreviewPath(row))
+
+const getFailureScreenshotPath = (row) => {
+    const status = normalizeStatus(row?.status)
+    if (!['FAIL', 'WARNING'].includes(status)) return ''
+    return row?.screenshot_path || ''
+}
+
+const hasFailureScreenshot = (row) => Boolean(getFailureScreenshotPath(row))
+
 const fetchDetail = async () => {
     loading.value = true
     try {
@@ -96,16 +127,17 @@ const fetchDetail = async () => {
             
             rawSteps.forEach(step => {
                 let caseName = "未分组步骤"
-                let stepDesc = step.step_name
+                let stepDesc = String(step.step_name || '')
 
                 // Parse pattern: "[case_name] step_desc"
-                const match = step.step_name.match(/^\[(.*?)\]\s*(.*)$/)
+                const match = stepDesc.match(/^\[(.*?)\]\s*(.*)$/)
                 if (match) {
                     caseName = match[1]
                     stepDesc = match[2]
                 }
 
-                stepDesc = translateStepDesc(stepDesc)
+                const display = step.report_display || {}
+                stepDesc = display.display_text || translateStepDesc(stepDesc)
                 
                 if (!caseMap.has(caseName)) {
                     caseMap.set(caseName, {
@@ -120,6 +152,7 @@ const fetchDetail = async () => {
                 const c = caseMap.get(caseName)
                 c.steps.push({
                     ...step,
+                    local_step_order: c.steps.length + 1,
                     display_name: stepDesc
                 })
                 c.duration += (step.duration || 0)
@@ -168,9 +201,19 @@ const handleBack = () => {
     router.back()
 }
 
-const viewScreenshot = (path) => {
+const viewStepPreview = (row) => {
+    const path = getStepPreviewPath(row)
     if (!path) return
-    currentScreenshot.value = api.getReportAssetUrl(path)
+    currentScreenshot.value = resolvePreviewUrl(path)
+    currentPreviewTitle.value = getStepPreviewLabel(row)
+    showScreenshot.value = true
+}
+
+const viewFailureScreenshot = (row) => {
+    const path = getFailureScreenshotPath(row)
+    if (!path) return
+    currentScreenshot.value = resolvePreviewUrl(path)
+    currentPreviewTitle.value = '失败截图'
     showScreenshot.value = true
 }
 
@@ -251,11 +294,11 @@ onMounted(() => {
                          >
                              <el-table-column label="步骤" width="80" align="center">
                                  <template #default="{ row }">
-                                     #{{ row.step_order }}
+                                     #{{ row.local_step_order || row.step_order }}
                                  </template>
                              </el-table-column>
                              
-                             <el-table-column label="名称 / 描述" min-width="300">
+                             <el-table-column label="名称 / 描述" width="276">
                                  <template #default="{ row }">
                                      <div class="step-name">
                                          {{ row.display_name || row.step_name }}
@@ -266,6 +309,28 @@ onMounted(() => {
                                  </template>
                              </el-table-column>
                              
+                             <el-table-column
+                                label="预览"
+                                min-width="300"
+                                align="left"
+                                header-align="left"
+                                class-name="preview-column"
+                                label-class-name="preview-column-header"
+                             >
+                                 <template #default="{ row }">
+                                     <el-button
+                                        v-if="hasStepPreview(row)"
+                                        class="preview-link-btn"
+                                        type="primary"
+                                        link
+                                        :icon="View"
+                                        @click.stop="viewStepPreview(row)"
+                                     >
+                                        {{ getStepPreviewLabel(row) }}
+                                     </el-button>
+                                 </template>
+                             </el-table-column>
+
                              <el-table-column label="耗时" width="120">
                                  <template #default="{ row }">
                                      {{ getDuration(row.duration) }}
@@ -280,14 +345,14 @@ onMounted(() => {
                                  </template>
                              </el-table-column>
                              
-                             <el-table-column label="截图" width="100" align="center">
+                             <el-table-column label="失败截图" width="100" align="center">
                                  <template #default="{ row }">
-                                     <el-button 
-                                        v-if="row.screenshot_path" 
-                                        type="primary" 
-                                        link 
-                                        :icon="Picture" 
-                                        @click.stop="viewScreenshot(row.screenshot_path)"
+                                     <el-button
+                                        v-if="hasFailureScreenshot(row)"
+                                        type="danger"
+                                        link
+                                        :icon="Picture"
+                                        @click.stop="viewFailureScreenshot(row)"
                                      >
                                         查看
                                      </el-button>
@@ -302,9 +367,9 @@ onMounted(() => {
         </div>
 
         <!-- Screenshot Modal -->
-        <el-dialog v-model="showScreenshot" title="步骤截图" width="80%" top="5vh">
+        <el-dialog v-model="showScreenshot" :title="currentPreviewTitle" width="80%" top="5vh">
             <div class="screenshot-wrapper">
-                <img :src="currentScreenshot" alt="Screenshot" />
+                <img :src="currentScreenshot" alt="步骤预览" />
             </div>
         </el-dialog>
     </div>
@@ -365,6 +430,15 @@ onMounted(() => {
 
 .step-name {
     font-weight: 500;
+}
+
+:deep(.preview-column .cell),
+:deep(.preview-column-header .cell) {
+    padding-left: 0;
+}
+
+:deep(.preview-link-btn) {
+    padding-left: 0;
 }
 
 .error-text {

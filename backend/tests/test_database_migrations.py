@@ -53,6 +53,10 @@ class DatabaseMigrationsTests(unittest.TestCase):
                 id INTEGER PRIMARY KEY
             );
 
+            CREATE TABLE testresult (
+                id INTEGER PRIMARY KEY
+            );
+
             CREATE TABLE fastbotreport (
                 id INTEGER PRIMARY KEY,
                 task_id INTEGER,
@@ -96,6 +100,9 @@ class DatabaseMigrationsTests(unittest.TestCase):
         self.assertIn("device_serial", testexecution_cols)
         self.assertIn("platform", testexecution_cols)
 
+        testresult_cols = {c[1] for c in self._table_columns("testresult")}
+        self.assertIn("report_display", testresult_cols)
+
         fastbotreport_cols = {c[1] for c in self._table_columns("fastbotreport")}
         self.assertIn("jank_data", fastbotreport_cols)
         self.assertIn("jank_events", fastbotreport_cols)
@@ -111,7 +118,7 @@ class DatabaseMigrationsTests(unittest.TestCase):
         self.assertEqual(scenario_col[3], 0)  # notnull flag
 
         rows = self.conn.execute("SELECT version FROM schema_migration ORDER BY version").fetchall()
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 5)
 
         # Re-run should be no-op and keep same version records.
         _run_migrations_with_conn(self.conn)

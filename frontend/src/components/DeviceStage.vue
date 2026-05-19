@@ -253,24 +253,13 @@ const getSelectionCenterPoint = (selection) => {
   }
 }
 
-const buildQuickImageStepDescription = (node) => {
-  const resourceId = String(node?.resourceId || '').trim()
-  if (resourceId) {
-    return `图像点击 [${resourceId.split('/').pop()}]`
-  }
-
-  const className = String(node?.className || '').trim()
-  const classTail = className ? className.split('.').pop() : '目标区域'
-  return `图像点击 [${classTail}]`
-}
-
 const addQuickImageStep = (imagePath, node) => {
   caseStore.addStep({
     action: 'click_image',
     selector: imagePath,
     selector_type: 'image',
     value: '',
-    description: buildQuickImageStepDescription(node),
+    description: '',
     error_strategy: 'ABORT'
   })
 }

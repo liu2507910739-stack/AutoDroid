@@ -549,6 +549,9 @@ class CrossPlatformRunnerTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["steps"][0]["status"], "PASS")
         self.assertEqual(result["runtime_variables"].get("PRICE"), "99.00")
+        self.assertEqual(result["steps"][0].get("output", {}).get("export_var"), "PRICE")
+        self.assertEqual(result["steps"][0].get("output", {}).get("export_value"), "99.00")
+        self.assertNotIn("screenshot", result["steps"][0])
 
         calls = getattr(self.runner.driver, "input_calls", [])
         self.assertEqual(len(calls), 1)

@@ -10,6 +10,7 @@ from jinja2 import Environment, FileSystemLoader
 import uuid
 
 from backend.paths import project_path
+from backend.report_display import enrich_cases_for_html, enrich_steps_for_html
 
 
 class ReportGenerator:
@@ -46,10 +47,12 @@ class ReportGenerator:
         """
         template = self.env.get_template("report.html")
         
+        steps_for_report = enrich_steps_for_html(steps_results)
+
         # 计算统计信息
-        total = len(steps_results)
-        passed = sum(1 for s in steps_results if s.get("status") == "success")
-        failed = sum(1 for s in steps_results if s.get("status") == "failed")
+        total = len(steps_for_report)
+        passed = sum(1 for s in steps_for_report if s.get("status") == "success")
+        failed = sum(1 for s in steps_for_report if s.get("status") == "failed")
         skipped = total - passed - failed
         
         total_duration = (end_time - start_time).total_seconds()
@@ -67,7 +70,7 @@ class ReportGenerator:
             failed=failed,
             skipped=skipped,
             pass_rate=round(pass_rate, 1),
-            steps=steps_results,
+            steps=steps_for_report,
             variables=variables or [],
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
@@ -112,10 +115,12 @@ class ReportGenerator:
         """
         template = self.env.get_template("scenario_report.html")
         
+        cases_for_report = enrich_cases_for_html(cases_results)
+
         # 统计信息
-        total_cases = len(cases_results)
-        passed_cases = sum(1 for c in cases_results if c.get("status") == "success")
-        failed_cases = sum(1 for c in cases_results if c.get("status") == "failed")
+        total_cases = len(cases_for_report)
+        passed_cases = sum(1 for c in cases_for_report if c.get("status") == "success")
+        failed_cases = sum(1 for c in cases_for_report if c.get("status") == "failed")
         
         total_duration = (end_time - start_time).total_seconds()
         pass_rate = (passed_cases / total_cases * 100) if total_cases > 0 else 0
@@ -131,7 +136,7 @@ class ReportGenerator:
             passed_cases=passed_cases,
             failed_cases=failed_cases,
             pass_rate=round(pass_rate, 1),
-            cases_results=cases_results,
+            cases_results=cases_for_report,
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
         

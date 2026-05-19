@@ -54,6 +54,10 @@ class ReportAssetPathTests(unittest.TestCase):
                 status="FAIL",
                 duration=100,
                 screenshot_path="/Users/old/AutoDroid/reports/screenshots/exec_9_step_1.png",
+                report_display={
+                    "display_text": "OCR提取变量 ORDER_ID",
+                    "preview_type": "screenshot",
+                },
             )
         )
         self.session.commit()
@@ -62,6 +66,8 @@ class ReportAssetPathTests(unittest.TestCase):
 
         self.assertEqual(len(detail.steps), 1)
         self.assertEqual(detail.steps[0].screenshot_path, "screenshots/exec_9_step_1.png")
+        self.assertEqual(detail.steps[0].report_display["display_text"], "OCR提取变量 ORDER_ID")
+        self.assertEqual(detail.steps[0].report_display["preview_path"], "screenshots/exec_9_step_1.png")
 
 
 if __name__ == "__main__":

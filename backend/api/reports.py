@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
 import json
@@ -25,6 +25,7 @@ class TestResultRead(BaseModel):
     error_message: Optional[str] = None
     screenshot_path: Optional[str] = None
     ui_hierarchy: Optional[str] = None
+    report_display: Optional[Dict[str, Any]] = None
     duration: float
 
 class TestExecutionRead(BaseModel):
@@ -604,6 +605,14 @@ def get_report_detail(execution_id: int, session: Session = Depends(get_session)
     for step in steps:
         step_data = dump_model(step)
         step_data["screenshot_path"] = _normalize_report_asset_path(step_data.get("screenshot_path"))
+        report_display = step_data.get("report_display")
+        if isinstance(report_display, dict):
+            report_display = dict(report_display)
+            if report_display.get("preview_type") == "screenshot":
+                report_display["preview_path"] = _normalize_report_asset_path(
+                    report_display.get("preview_path") or step_data.get("screenshot_path")
+                )
+            step_data["report_display"] = report_display
         steps_read.append(TestResultRead(**step_data))
     
     detail = TestExecutionDetail(**dump_model(execution))
@@ -720,6 +729,7 @@ def download_report(execution_id: int, session: Session = Depends(get_session)):
             "step_name": step.step_name,
             "action": "step",
             "description": step.step_name,
+            "report_display": step.report_display,
             "status": "success" if step.status == "PASS" else "failed",
             "duration": (step.duration or 0) / 1000.0,
             "log": step.error_message or "",

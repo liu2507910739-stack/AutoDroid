@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import Integer, JSON
@@ -95,6 +95,7 @@ class TestResult(SQLModel, table=True):
     error_message: Optional[str] = None
     screenshot_path: Optional[str] = None
     ui_hierarchy: Optional[str] = None # Store XML content
+    report_display: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     duration: float = 0.0 # milliseconds
 
 

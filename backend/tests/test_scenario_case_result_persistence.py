@@ -99,8 +99,10 @@ class ScenarioCaseResultPersistenceTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0].status, "PASS")
         self.assertEqual(rows[0].step_name, "[case-a] 点击登录")
+        self.assertEqual(rows[0].report_display["display_text"], "点击登录")
         self.assertEqual(rows[0].screenshot_path, "screenshots/fake.png")
         self.assertEqual(rows[1].status, "WARNING")
+        self.assertEqual(rows[1].report_display["display_text"], "等待首页")
         self.assertEqual(rows[1].error_message, "ignored")
 
     def test_case_level_error_screenshot_fills_first_failed_step(self):

@@ -217,7 +217,6 @@ from backend.feature_flags import (
     is_flag_enabled,
 )
 from backend.step_contract import (
-    ACTION_DISPLAY_NAMES,
     legacy_step_to_standard,
     normalize_error_strategy,
     normalize_execute_on,
@@ -238,6 +237,7 @@ app.mount(REPORT_ASSET_DEV_PREFIX, StaticFiles(directory=str(REPORTS_DIR)), name
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/api/static", StaticFiles(directory=str(STATIC_DIR)), name="api_static")
 
 from backend.api import auth, cases
 
@@ -763,13 +763,12 @@ def _build_step_from_inspect(inspect_res: dict, operation: str = "click") -> dic
         if strategy not in {"text", "description"} or not has_semantic_locator:
             raise HTTPException(status_code=400, detail=CLICK_IMAGE_REQUIRED_DETAIL)
 
-    desc = element.get("text") or element.get("description") or "element"
     return {
         "action": "click" if operation == "click" else operation,
         "selector": inspect_res["selector"],
         "selector_type": strategy,
         "value": "",
-        "description": f"Click [{desc}]",
+        "description": "",
         "error_strategy": "ABORT"
     }
 
@@ -918,7 +917,7 @@ def interact_with_device(req: InteractionRequest, session: Session = Depends(get
                 "selector": req.action_data or "",
                 "selector_type": "text" if req.operation in ["start_app", "stop_app", "swipe"] else "resourceId",
                 "value": "",
-                "description": f"{ACTION_DISPLAY_NAMES.get(req.operation, req.operation)} {req.action_data or ''}".strip(),
+                "description": "",
                 "error_strategy": "ABORT"
             }
 
@@ -1265,14 +1264,15 @@ async def websocket_run_case(websocket: WebSocket, case_id: int, env_id: Optiona
 
                     if status == "PASS":
                         passed += 1
-                        steps_results.append(
-                            {
-                                **legacy_step,
-                                "status": "success",
-                                "duration": round(duration, 2),
-                                "log": f"✓ 步骤成功 ({round(duration, 2)}s)",
-                            }
-                        )
+                        success_entry = {
+                            **legacy_step,
+                            "status": "success",
+                            "duration": round(duration, 2),
+                            "log": f"✓ 步骤成功 ({round(duration, 2)}s)",
+                        }
+                        if isinstance(step_result.get("output"), dict):
+                            success_entry["output"] = step_result.get("output")
+                        steps_results.append(success_entry)
                         await manager.broadcast_step_update(
                             case_id, i, "success", f"✓ 步骤 {i+1} 成功", duration
                         )
@@ -1418,12 +1418,15 @@ async def websocket_run_case(websocket: WebSocket, case_id: int, env_id: Optiona
                         passed += 1
 
                         step_data = step if isinstance(step, dict) else dump_model(step)
-                        steps_results.append({
+                        success_entry = {
                             **step_data,
                             "status": "success",
                             "duration": round(duration, 2),
                             "log": f"✓ 步骤成功 ({round(duration, 2)}s)"
-                        })
+                        }
+                        if isinstance(result.get("output"), dict):
+                            success_entry["output"] = result.get("output")
+                        steps_results.append(success_entry)
 
                         await manager.broadcast_step_update(
                             case_id, i, "success",

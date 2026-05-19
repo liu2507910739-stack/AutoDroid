@@ -500,7 +500,7 @@ const addCustomStep = () => {
     selector_type: null,
     value: '',
     options: {},
-    description: '文本断言',
+    description: '',
     error_strategy: 'ABORT',
     execute_on: ['android', 'ios'],
     platform_overrides: {

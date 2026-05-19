@@ -26,7 +26,7 @@ class RecordingClickGuardTests(unittest.TestCase):
 
         self.assertEqual(step["selector"], "登录")
         self.assertEqual(step["selector_type"], "text")
-        self.assertEqual(step["description"], "Click [登录]")
+        self.assertEqual(step["description"], "")
 
     def test_build_step_rejects_xpath_fallback_for_click_recording(self):
         inspect_res = {

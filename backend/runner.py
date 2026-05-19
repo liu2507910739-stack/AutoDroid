@@ -305,11 +305,17 @@ class TestRunner:
                     step.options or {},
                     variables
                 )
-                return {
+                payload = {
                     "step": _dump_model(step),
                     "success": True,
                     "duration": time.time() - start_time
                 }
+                if step.action == ActionType.EXTRACT_BY_OCR:
+                    payload["output"] = {
+                        "export_var": target_value,
+                        "export_value": variables.get(str(target_value or ""), ""),
+                    }
+                return payload
             except Exception as e:
                 error_message = str(e)
                 logger.warning(f"第 {attempt + 1}/{max_retries + 1} 次尝试失败: {e}")

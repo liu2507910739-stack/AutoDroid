@@ -520,6 +520,7 @@ export const useCaseStore = defineStore('case', () => {
         const normalized = isStandardStepPayload(step)
             ? standardStepToUiStep(step)
             : ensureCrossPlatformFields(step)
+        normalized.description = ''
         currentCase.value.steps.push(normalized)
         lastAddedStepUuid.value = normalized.uuid || null
     }

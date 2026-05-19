@@ -66,6 +66,27 @@ class _FakeImage:
 
 
 class LegacyRunnerInputTests(unittest.TestCase):
+    def test_successful_ocr_step_includes_output(self):
+        runner = TestRunner(device_serial="android-1")
+        runner.d = _FakeDevice(focused_element=None)
+
+        def perform_action(action, selector, selector_type, value, options, variables):
+            variables[value] = "99.00"
+
+        runner._perform_action = perform_action
+        step = Step(
+            action=ActionType.EXTRACT_BY_OCR,
+            selector="[0.1,0.1,0.2,0.2]",
+            selector_type=SelectorType.TEXT,
+            value="PRICE",
+        )
+
+        result = runner.execute_step(step, variables={})
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result.get("output"), {"export_var": "PRICE", "export_value": "99.00"})
+        self.assertNotIn("screenshot", result)
+
     def test_input_without_selector_falls_back_to_send_keys(self):
         runner = TestRunner(device_serial="android-1")
         runner.d = _FakeDevice(focused_element=None)

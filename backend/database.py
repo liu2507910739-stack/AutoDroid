@@ -74,6 +74,7 @@ def _migration_add_columns(cursor) -> None:
         ("testcasestep", "description", "VARCHAR"),
         ("testexecution", "device_serial", "VARCHAR"),
         ("testexecution", "platform", "VARCHAR"),
+        ("testresult", "report_display", "JSON"),
     ]
 
     for table, column, col_type in migrations:
@@ -175,6 +176,17 @@ def _migrate_fastbotreport_jank_fields(cursor) -> None:
             logger.info("Migration: ALTER TABLE fastbotreport ADD COLUMN %s", column)
 
 
+def _migrate_testresult_report_display(cursor) -> None:
+    if not _table_exists(cursor, "testresult"):
+        return
+
+    cursor.execute("PRAGMA table_info(testresult)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+    if "report_display" not in existing_cols:
+        cursor.execute("ALTER TABLE testresult ADD COLUMN report_display JSON")
+        logger.info("Migration: ALTER TABLE testresult ADD COLUMN report_display")
+
+
 def _run_migrations_with_conn(conn) -> None:
     cursor = conn.cursor()
     _ensure_schema_migration_table(cursor)
@@ -184,6 +196,7 @@ def _run_migrations_with_conn(conn) -> None:
         ("20260305_002_backfill_testcasestep_order", _migrate_testcasestep_order_to_step_order),
         ("20260305_003_scheduledtask_scenario_nullable", _migrate_scheduledtask_scenario_id_nullable),
         ("20260312_004_fastbotreport_jank_fields", _migrate_fastbotreport_jank_fields),
+        ("20260519_005_testresult_report_display", _migrate_testresult_report_display),
     ]
 
     for version, migration_func in migration_plan:

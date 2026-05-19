@@ -307,6 +307,22 @@
             font-size: 12px;
         }
 
+        .step-preview {
+            margin-top: 8px;
+            color: #909399;
+            font-size: 12px;
+        }
+
+        .step-preview img {
+            display: block;
+            max-width: 220px;
+            max-height: 140px;
+            margin-top: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
         .footer {
             text-align: center;
             padding: 20px;
@@ -380,17 +396,29 @@
 
                 <div class="step-list" onclick="event.stopPropagation()">
                     {% for step in case.steps %}
+                    {% set display = step.report_display or {} %}
                     <div class="step-row">
                         <div class="step-status-icon {{ step.status }}">
-                            {{ '✓' if step.status == 'success' else ('!' if step.status == 'warning' else '✗') }}
+                            {{ loop.index }}
                         </div>
                         <div class="step-content">
-                            <div class="step-desc">{{ step.action }} - {{ step.description }}</div>
-                            <div class="step-detail">{{ step.selector_type }}: {{ step.selector }}</div>
+                            <div class="step-desc">{{ display.display_text or step.description or step.action }}</div>
+                            {% if display.preview_type and (display.preview_base64 or display.preview_path) %}
+                            <div class="step-preview">
+                                <span>{{ display.preview_label or '预览' }}</span>
+                                {% if display.preview_base64 %}
+                                <a href="data:image/png;base64,{{ display.preview_base64 }}" target="_blank">
+                                    <img src="data:image/png;base64,{{ display.preview_base64 }}" alt="{{ display.preview_label or '预览' }}">
+                                </a>
+                                {% elif display.preview_path %}
+                                <span>{{ display.preview_path }}</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                             {% if step.error %}
                             <div class="step-error">{{ step.error }}</div>
                             {% endif %}
-                            {% if step.screenshot %}
+                            {% if step.screenshot and not display.preview_base64 %}
                             <div class="step-screenshot" style="margin-top: 10px;">
                                 <a href="data:image/png;base64,{{ step.screenshot }}" target="_blank">
                                     <img src="data:image/png;base64,{{ step.screenshot }}"
