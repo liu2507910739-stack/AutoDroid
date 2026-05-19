@@ -50,6 +50,7 @@ class DeviceInfo:
         self.screen_width: int = 0
         self.screen_height: int = 0
         self.ready: bool = False
+        self.initializing: bool = False
         self.error: Optional[str] = None
         
         # 广播机制
@@ -315,6 +316,13 @@ class ScrcpyDeviceManager:
                 return
             self._connecting.add(serial)
 
+        # 标记正在初始化，供前端跳过重连
+        dev_info_init = DeviceInfo(serial, 0)
+        dev_info_init.initializing = True
+        with self._lock:
+            if serial not in self._devices:
+                self._devices[serial] = dev_info_init
+
         local_port: Optional[int] = None
         dev_info: Optional[DeviceInfo] = None
         proc: Optional[subprocess.Popen] = None
@@ -511,6 +519,10 @@ class ScrcpyDeviceManager:
         finally:
             with self._lock:
                 self._connecting.discard(serial)
+                # 清除初始化标记
+                stored = self._devices.get(serial)
+                if stored:
+                    stored.initializing = False
 
 
     def _on_device_disconnected(self, serial: str):
@@ -959,8 +971,6 @@ class ScrcpyDeviceManager:
         """清理旧连接，重新初始化设备"""
         with self._lock:
             if serial in self._connecting:
-                if serial not in self._devices:
-                    self._devices[serial] = DeviceInfo(serial, 0)
                 logger.info("设备 %s 正在初始化投屏通道，跳过重复重连", serial)
                 return
             self._cleanup_device(serial)
@@ -984,6 +994,7 @@ class ScrcpyDeviceManager:
                     "screen_width": info.screen_width,
                     "screen_height": info.screen_height,
                     "ready": info.ready,
+                    "initializing": info.initializing,
                     "error": info.error,
                     "port": info.local_port
                 })
@@ -1000,6 +1011,7 @@ class ScrcpyDeviceManager:
             "screen_width": dev_info.screen_width,
             "screen_height": dev_info.screen_height,
             "ready": dev_info.ready,
+            "initializing": dev_info.initializing,
             "error": dev_info.error
         }
 
