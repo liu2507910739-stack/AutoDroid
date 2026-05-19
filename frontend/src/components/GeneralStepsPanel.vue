@@ -51,7 +51,7 @@ const draggableSteps = ref([
   { action: 'home', selector: '', description: ACTION_LABELS.home, icon: markRaw(House) },
   { action: 'swipe', selector: 'up', description: '上滑', icon: markRaw(Top) },
   { action: 'swipe', selector: 'down', description: '下滑', icon: markRaw(Bottom) },
-  { action: 'sleep', selector: '', value: '5', description: `${ACTION_LABELS.sleep} 5 秒`, icon: markRaw(Timer) },
+  { action: 'sleep', selector: '', value: '5', description: ACTION_LABELS.sleep, icon: markRaw(Timer) },
   { action: 'wait_until_exists', selector: '', description: ACTION_LABELS.wait_until_exists, icon: markRaw(Timer) },
 ])
 
@@ -65,7 +65,7 @@ const handleClone = (item) => {
     selector,
     selector_type: 'text',
     value: item.value || '',
-    description: item.description,
+    description: '',
     timeout: 10,
     error_strategy: 'ABORT',
     execute_on: ['android', 'ios'],

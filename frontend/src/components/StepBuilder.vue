@@ -468,6 +468,13 @@ const handleActionChange = (step) => {
 
 const getStepTitle = (step) => {
   const actionLabel = getActionLabel(step.action)
+  if (step.action === 'back' || step.action === 'home') {
+    return actionLabel
+  }
+  if (step.action === 'sleep') {
+    const seconds = String(step?.value || '').trim()
+    return seconds ? `${actionLabel} → ${seconds}秒` : actionLabel
+  }
   if (step.action === 'assert_text') {
     const matchMode = step?.options?.match_mode === 'not_contains' ? '不包含' : '包含'
     const expectedText = String(step?.value || '').trim()
@@ -891,6 +898,7 @@ const handleExecuteStep = async (step) => {
                   v-if="step.action === 'sleep'"
                   :model-value="parseFloat(step.value) || 5"
                   @update:model-value="val => step.value = String(val)"
+                  @blur="() => { if (!step.value || !Number.isFinite(Number(step.value)) || Number(step.value) < 1) step.value = '5' }"
                   :min="1"
                   :max="120"
                   :step="1"
