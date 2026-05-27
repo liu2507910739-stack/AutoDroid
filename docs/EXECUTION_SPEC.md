@@ -121,8 +121,8 @@
 ## 7. 结果状态语义
 
 - 步骤级：`PASS/SKIP/WARNING/FAIL`。
-- 用例级：`PASS/WARNING/FAIL`（全 `SKIP` 归类为 `WARNING`）。
-- 场景级：`PASS/WARNING/FAIL`（全 `SKIP` 归类为 `WARNING`）。
+- 用例级：`PASS/WARNING/FAIL/ABORTED`（全 `SKIP` 归类为 `WARNING`，人工终止归类为 `ABORTED`）。
+- 场景级：`PASS/WARNING/FAIL/ABORTED`（全 `SKIP` 归类为 `WARNING`，人工终止归类为 `ABORTED`）。
 
 ## 8. 推荐执行顺序
 

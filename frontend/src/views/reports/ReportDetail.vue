@@ -67,6 +67,7 @@ const getStatusTagType = (status) => {
     if (s === 'WARNING') return 'warning'
     if (s === 'SKIP') return 'info'
     if (s === 'RUNNING') return ''
+    if (s === 'ABORTED') return 'info'
     return 'danger'
 }
 

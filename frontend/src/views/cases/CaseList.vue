@@ -1,8 +1,8 @@
 <script setup>
-import { ref, onActivated, reactive, nextTick } from 'vue'
+import { ref, onActivated, onDeactivated, onUnmounted, reactive, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, VideoPlay, CopyDocument, Delete, Search, Refresh, Edit, ArrowDown, FolderAdd, EditPen, Document, FolderOpened } from '@element-plus/icons-vue'
+import { Plus, VideoPlay, CopyDocument, Delete, Search, Refresh, Edit, ArrowDown, FolderAdd, EditPen, Document, FolderOpened, CircleClose } from '@element-plus/icons-vue'
 import api from '@/api'
 import dayjs from 'dayjs'
 
@@ -147,6 +147,8 @@ const selectedCases = ref([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const activeCaseRuns = ref({})
+let activeRunTimer = null
 
 const queryParams = reactive({
     keyword: ''
@@ -172,6 +174,7 @@ const fetchCases = async () => {
         total.value = res.data.total || 0
 
         cases.value = data
+        restoreActiveCaseRuns()
     } catch (err) {
         console.error('Fetch error:', err)
         errorMsg.value = err.message || '未知错误'
@@ -305,6 +308,7 @@ const normalizeCaseRunStatus = (status) => {
     if (normalized === 'fail' || normalized === 'failed' || normalized === 'error') return 'FAIL'
     if (normalized === 'warning') return 'WARNING'
     if (normalized === 'running' || normalized === 'running...') return 'RUNNING'
+    if (normalized === 'aborted' || normalized === 'cancelled') return 'ABORTED'
     return ''
 }
 
@@ -314,10 +318,17 @@ const caseRunStatusTagType = (status) => {
     if (normalized === 'WARNING') return 'warning'
     if (normalized === 'FAIL') return 'danger'
     if (normalized === 'RUNNING') return 'info'
+    if (normalized === 'ABORTED') return 'info'
     return 'info'
 }
 
-const handleRunClick = (row) => {
+const isCaseRunActive = (row) => Boolean(activeCaseRuns.value[row.id])
+
+const handleRunClick = async (row) => {
+    if (isCaseRunActive(row)) {
+        await terminateCaseRun(row)
+        return
+    }
     runningCaseId.value = row.id
     runDialogVisible.value = true
     // Fetch and retain previous selections if valid, else pick defaults
@@ -346,10 +357,7 @@ const confirmRun = async () => {
             return
         }
 
-        const promises = runnable.map(serial =>
-            api.runTestCaseAsync(runningCaseId.value, runForm.envId, serial)
-        )
-        await Promise.all(promises)
+        const { data } = await api.runTestCaseBatch(runningCaseId.value, runForm.envId, runnable)
 
         if (blocked.length > 0) {
             const first = blocked[0]
@@ -361,8 +369,90 @@ const confirmRun = async () => {
         // Update the item status optimistically
         const caseItem = cases.value.find(c => c.id === runningCaseId.value)
         if (caseItem) caseItem.last_run_status = 'RUNNING'
+        activeCaseRuns.value = {
+            ...activeCaseRuns.value,
+            [runningCaseId.value]: {
+                batch_id: data?.batch_id,
+                run_ids: data?.run_ids || [],
+                device_serials: runnable
+            }
+        }
+        startActiveRunPolling()
     } catch (err) {
         ElMessage.error('启动批量执行失败: ' + err.message)
+    }
+}
+
+const terminateCaseRun = async (row) => {
+    const active = activeCaseRuns.value[row.id]
+    if (!active) return
+    try {
+        await api.cancelRun({
+            kind: 'case',
+            target_id: row.id,
+            batch_id: active.batch_id || null,
+            run_ids: active.run_ids || [],
+            device_serials: active.device_serials || []
+        })
+        ElMessage.warning('已发送终止请求')
+        row.last_run_status = 'ABORTED'
+        const next = { ...activeCaseRuns.value }
+        delete next[row.id]
+        activeCaseRuns.value = next
+    } catch (err) {
+        ElMessage.error('终止失败: ' + (err.response?.data?.detail || err.message))
+    }
+}
+
+const restoreActiveCaseRuns = async () => {
+    const runningRows = cases.value.filter(row => normalizeCaseRunStatus(row.last_run_status) === 'RUNNING')
+    if (runningRows.length === 0) return
+    const next = { ...activeCaseRuns.value }
+    for (const row of runningRows) {
+        try {
+            const { data } = await api.getActiveRuns('case', row.id)
+            const items = data?.items || []
+            if (items.length > 0) {
+                next[row.id] = {
+                    batch_id: items[0]?.batch_id,
+                    run_ids: items.map(item => item.run_id).filter(Boolean),
+                    device_serials: items.map(item => item.device_serial).filter(Boolean)
+                }
+            }
+        } catch {}
+    }
+    activeCaseRuns.value = next
+    if (Object.keys(next).length > 0) startActiveRunPolling()
+}
+
+const startActiveRunPolling = () => {
+    stopActiveRunPolling()
+    activeRunTimer = setInterval(async () => {
+        const entries = Object.entries(activeCaseRuns.value)
+        if (entries.length === 0) {
+            stopActiveRunPolling()
+            return
+        }
+        const next = { ...activeCaseRuns.value }
+        let changed = false
+        for (const [caseId] of entries) {
+            try {
+                const { data } = await api.getActiveRuns('case', Number(caseId))
+                if ((data?.items || []).length === 0) {
+                    delete next[caseId]
+                    changed = true
+                }
+            } catch {}
+        }
+        activeCaseRuns.value = next
+        if (changed) fetchCases()
+    }, 3000)
+}
+
+const stopActiveRunPolling = () => {
+    if (activeRunTimer) {
+        clearInterval(activeRunTimer)
+        activeRunTimer = null
     }
 }
 
@@ -456,6 +546,9 @@ onActivated(() => {
     fetchFolderTree()
     fetchCases()
 })
+
+onDeactivated(stopActiveRunPolling)
+onUnmounted(stopActiveRunPolling)
 </script>
 
 <template>
@@ -621,7 +714,12 @@ onActivated(() => {
                             <el-table-column label="操作" width="180" align="center" fixed="right">
                                 <template #default="{ row }">
                                     <el-tooltip content="后台运行" placement="top">
-                                        <el-button :icon="VideoPlay" link type="success" @click="handleRunClick(row)" />
+                                        <el-button
+                                            :icon="isCaseRunActive(row) ? CircleClose : VideoPlay"
+                                            link
+                                            :type="isCaseRunActive(row) ? 'danger' : 'success'"
+                                            @click="handleRunClick(row)"
+                                        />
                                     </el-tooltip>
                                     <el-tooltip content="编辑" placement="top">
                                         <el-button :icon="Edit" link type="primary" @click="handleEdit(row)" />
