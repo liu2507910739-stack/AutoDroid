@@ -103,12 +103,14 @@ const fetchData = async () => {
             let anyRunning = false
             let anyFail = false
             let anyWarning = false
+            let anyAborted = false
             let maxDuration = 0
             
             g.executions.forEach(e => {
                 if (e.status === 'RUNNING' || e.status === 'PENDING') anyRunning = true
                 else if (e.status === 'FAIL' || e.status === 'ERROR') anyFail = true
                 else if (e.status === 'WARNING') anyWarning = true
+                else if (e.status === 'ABORTED') anyAborted = true
                 
                 if (e.duration > maxDuration) maxDuration = e.duration
             })
@@ -116,6 +118,7 @@ const fetchData = async () => {
             if (anyRunning) g.status = 'RUNNING'
             else if (anyFail) g.status = 'FAIL'
             else if (anyWarning) g.status = 'WARNING'
+            else if (anyAborted) g.status = 'ABORTED'
             else g.status = 'PASS'
             
             g.duration = maxDuration
@@ -373,7 +376,7 @@ onUnmounted(() => {
                                             </el-table-column>
                                             <el-table-column label="状态" width="100">
                                                 <template #default="{ row: subRow }">
-                                                    <el-tag :type="subRow.status === 'PASS' ? 'success' : (subRow.status === 'WARNING' ? 'warning' : (subRow.status === 'RUNNING' ? '' : 'danger'))" size="small" effect="plain">
+                                                    <el-tag :type="subRow.status === 'PASS' ? 'success' : (subRow.status === 'WARNING' ? 'warning' : (subRow.status === 'RUNNING' ? '' : (subRow.status === 'ABORTED' ? 'info' : 'danger')))" size="small" effect="plain">
                                                         {{ subRow.status }}
                                                     </el-tag>
                                                 </template>
@@ -408,7 +411,7 @@ onUnmounted(() => {
                             
                             <el-table-column label="汇总状态" width="120">
                                 <template #default="{ row }">
-                                    <el-tag :type="row.status === 'PASS' ? 'success' : (row.status === 'WARNING' ? 'warning' : (row.status === 'RUNNING' ? '' : 'danger'))">
+                                    <el-tag :type="row.status === 'PASS' ? 'success' : (row.status === 'WARNING' ? 'warning' : (row.status === 'RUNNING' ? '' : (row.status === 'ABORTED' ? 'info' : 'danger')))">
                                         {{ row.status === 'RUNNING' ? '待完成' : row.status }}
                                     </el-tag>
                                 </template>

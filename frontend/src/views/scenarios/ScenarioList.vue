@@ -1,8 +1,8 @@
 <script setup>
-import { ref, onActivated, computed, reactive } from 'vue'
+import { ref, onActivated, onDeactivated, onUnmounted, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus, Search, VideoPlay, Edit, Delete, Refresh, MoreFilled, 
-         Check, Close, Timer } from '@element-plus/icons-vue'
+         Check, Close, Timer, CircleClose } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
@@ -14,6 +14,8 @@ const scenarios = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
 const filterStatus = ref('all') // all, success, warning, failure
+const activeScenarioRuns = ref({})
+let activeRunTimer = null
 
 // Pagination
 const currentPage = ref(1)
@@ -47,6 +49,7 @@ const fetchScenarios = async () => {
         }
         
         scenarios.value = data
+        restoreActiveScenarioRuns()
         
     } catch (err) {
         ElMessage.error('获取场景列表失败')
@@ -155,7 +158,13 @@ const fetchRunConfigOptions = async () => {
     }
 }
 
-const handleRunClick = (row) => {
+const isScenarioRunActive = (row) => Boolean(activeScenarioRuns.value[row.id])
+
+const handleRunClick = async (row) => {
+    if (isScenarioRunActive(row)) {
+        await terminateScenarioRun(row)
+        return
+    }
     runningScenarioId.value = row.id
     runDialogVisible.value = true
     fetchRunConfigOptions()
@@ -196,9 +205,91 @@ const confirmRun = async () => {
         // Optimistic update
         const item = scenarios.value.find(s => s.id === runningScenarioId.value)
         if (item) item.last_run_status = 'RUNNING'
+        activeScenarioRuns.value = {
+            ...activeScenarioRuns.value,
+            [runningScenarioId.value]: {
+                batch_id: data?.batch_id,
+                execution_ids: data?.execution_ids || [],
+                device_serials: runnable
+            }
+        }
+        startActiveRunPolling()
         fetchScenarios() 
     } catch (err) {
         ElMessage.error('启动失败: ' + summarizeHttpDetail(err))
+    }
+}
+
+const terminateScenarioRun = async (row) => {
+    const active = activeScenarioRuns.value[row.id]
+    if (!active) return
+    try {
+        await api.cancelRun({
+            kind: 'scenario',
+            target_id: row.id,
+            batch_id: active.batch_id || null,
+            execution_ids: active.execution_ids || [],
+            device_serials: active.device_serials || []
+        })
+        ElMessage.warning('已发送终止请求')
+        row.last_run_status = 'ABORTED'
+        const next = { ...activeScenarioRuns.value }
+        delete next[row.id]
+        activeScenarioRuns.value = next
+    } catch (err) {
+        ElMessage.error('终止失败: ' + summarizeHttpDetail(err))
+    }
+}
+
+const restoreActiveScenarioRuns = async () => {
+    const runningRows = scenarios.value.filter(row => normalizeRunStatus(row.last_run_status) === 'running')
+    if (runningRows.length === 0) return
+    const next = { ...activeScenarioRuns.value }
+    for (const row of runningRows) {
+        try {
+            const { data } = await api.getActiveRuns('scenario', row.id)
+            const items = data?.items || []
+            if (items.length > 0) {
+                next[row.id] = {
+                    batch_id: items[0]?.batch_id,
+                    execution_ids: items.map(item => item.execution_id).filter(Boolean),
+                    device_serials: items.map(item => item.device_serial).filter(Boolean)
+                }
+            }
+        } catch {}
+    }
+    activeScenarioRuns.value = next
+    if (Object.keys(next).length > 0) startActiveRunPolling()
+}
+
+const startActiveRunPolling = () => {
+    stopActiveRunPolling()
+    activeRunTimer = setInterval(async () => {
+        const entries = Object.entries(activeScenarioRuns.value)
+        if (entries.length === 0) {
+            stopActiveRunPolling()
+            return
+        }
+        const next = { ...activeScenarioRuns.value }
+        let changed = false
+        for (const [scenarioId] of entries) {
+            try {
+                const { data } = await api.getActiveRuns('scenario', Number(scenarioId))
+                if ((data?.items || []).length === 0) {
+                    delete next[scenarioId]
+                    changed = true
+                }
+            } catch {}
+        }
+        activeScenarioRuns.value = next
+        if (changed) fetchScenarios()
+    }, 3000)
+}
+
+const stopActiveRunPolling = () => {
+    if (activeRunTimer) {
+        clearInterval(activeRunTimer)
+        activeRunTimer = null
     }
 }
 
@@ -278,6 +369,7 @@ const getStatusColor = (status) => {
     if (s === 'fail' || s === 'failed') return '#F56C6C' // Red
     if (s === 'warning') return '#E6A23C' // Orange
     if (s === 'running') return '#409EFF' // Blue
+    if (s === 'aborted' || s === 'cancelled') return '#909399'
     return '#E6A23C' // Warning
 }
 
@@ -295,6 +387,9 @@ const getDuration = (row) => {
 onActivated(() => {
     fetchScenarios()
 })
+
+onDeactivated(stopActiveRunPolling)
+onUnmounted(stopActiveRunPolling)
 </script>
 
 <template>
@@ -370,6 +465,11 @@ onActivated(() => {
                                         <el-icon class="is-loading"><Refresh /></el-icon> 执行中...
                                     </span>
                                 </template>
+                                <template v-else-if="normalizeRunStatus(item.last_run_status) === 'aborted' || normalizeRunStatus(item.last_run_status) === 'cancelled'">
+                                    <span class="status-text neutral">
+                                        已终止
+                                    </span>
+                                </template>
                                 <template v-else>
                                     <span class="status-text neutral">尚未执行</span>
                                 </template>
@@ -408,7 +508,13 @@ onActivated(() => {
                             
                             <div class="btn-group">
                                  <el-tooltip content="运行" placement="top">
-                                    <el-button type="primary" :icon="VideoPlay" circle class="action-btn-run" @click="handleRunClick(item)" />
+                                    <el-button
+                                      :type="isScenarioRunActive(item) ? 'danger' : 'primary'"
+                                      :icon="isScenarioRunActive(item) ? CircleClose : VideoPlay"
+                                      circle
+                                      class="action-btn-run"
+                                      @click="handleRunClick(item)"
+                                    />
                                  </el-tooltip>
                                  
                                  <el-tooltip content="编辑" placement="top">

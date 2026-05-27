@@ -135,6 +135,7 @@ const statusPieOption = computed(() => {
     WARNING: '告警',
     FAIL: '失败',
     ERROR: '错误',
+    ABORTED: '已终止',
     RUNNING: '运行中',
   }
   const colorMap = {
@@ -142,6 +143,7 @@ const statusPieOption = computed(() => {
     WARNING: '#E6A23C',
     FAIL: '#F56C6C',
     ERROR: '#D03050',
+    ABORTED: '#909399',
     RUNNING: '#409EFF',
   }
   const rows = (overview.value.status_distribution || [])
@@ -252,6 +254,7 @@ const statusTagType = (status) => {
   if (normalized === 'PASS') return 'success'
   if (normalized === 'WARNING') return 'warning'
   if (normalized === 'FAIL' || normalized === 'ERROR') return 'danger'
+  if (normalized === 'ABORTED') return 'info'
   if (normalized === 'RUNNING') return 'info'
   return 'info'
 }
