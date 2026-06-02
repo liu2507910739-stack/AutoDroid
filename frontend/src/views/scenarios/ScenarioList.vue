@@ -6,8 +6,10 @@ import { Plus, Search, VideoPlay, Edit, Delete, Refresh, MoreFilled,
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
+import { useClientMode } from '@/composables/useClientMode'
 
 const router = useRouter()
+const { isMobileMode } = useClientMode()
 
 // Data
 const scenarios = ref([])
@@ -393,7 +395,72 @@ onUnmounted(stopActiveRunPolling)
 </script>
 
 <template>
-    <div class="scenario-list-container">
+    <div v-if="isMobileMode" class="mobile-scenario-page">
+        <div class="mobile-scenario-toolbar">
+            <el-input
+                v-model="searchQuery"
+                placeholder="搜索场景..."
+                :prefix-icon="Search"
+                clearable
+                class="mobile-search-input"
+                @keyup.enter="handleSearch"
+                @clear="handleSearch"
+            />
+            <el-button :icon="Refresh" circle @click="fetchScenarios" />
+        </div>
+
+        <el-radio-group v-model="filterStatus" class="mobile-status-filter" @change="handleSearch">
+            <el-radio-button value="all">全部</el-radio-button>
+            <el-radio-button value="success">成功</el-radio-button>
+            <el-radio-button value="warning">告警</el-radio-button>
+            <el-radio-button value="failure">失败</el-radio-button>
+        </el-radio-group>
+
+        <div class="mobile-scenario-list" v-loading="loading">
+            <article
+                v-for="item in scenarios"
+                :key="item.id"
+                class="mobile-scenario-card"
+            >
+                <div class="mobile-scenario-strip" :style="{ backgroundColor: getStatusColor(item.last_run_status) }"></div>
+                <div class="mobile-scenario-body">
+                    <div class="mobile-scenario-header">
+                        <div class="mobile-scenario-title">
+                            <strong>{{ item.name }}</strong>
+                        </div>
+                        <el-tag size="small" effect="plain">
+                            {{ normalizeRunStatus(item.last_run_status) || 'not_run' }}
+                        </el-tag>
+                    </div>
+                    <div class="mobile-scenario-info-line">
+                        <span>{{ item.step_count || 0 }} 步</span>
+                        <span>{{ getDuration(item) }}</span>
+                        <span>更新 {{ formatDate(item.updated_at) }}</span>
+                        <span v-if="item.last_run_time">执行 {{ formatDate(item.last_run_time) }}</span>
+                        <span v-else>未执行</span>
+                    </div>
+                    <div class="mobile-scenario-actions">
+                        <el-button type="primary" :icon="VideoPlay" @click="handleRunClick(item)">执行场景</el-button>
+                        <el-button :disabled="!item.last_execution_id && !item.last_report_id" @click="handleReport(item)">查看报告</el-button>
+                    </div>
+                </div>
+            </article>
+            <el-empty v-if="!loading && scenarios.length === 0" description="暂无场景" :image-size="90" />
+        </div>
+
+        <div class="mobile-pagination" v-if="total > 0">
+            <el-pagination
+                v-model:current-page="currentPage"
+                :page-size="pageSize"
+                :background="true"
+                layout="prev, pager, next"
+                :total="total"
+                @current-change="handleCurrentChange"
+            />
+        </div>
+    </div>
+
+    <div v-else class="scenario-list-container">
         <div class="content-wrapper">
             <!-- Header -->
             <div class="list-header">
@@ -600,6 +667,53 @@ onUnmounted(stopActiveRunPolling)
             </template>
         </el-dialog>
     </div>
+
+    <el-drawer
+        v-if="isMobileMode"
+        v-model="runDialogVisible"
+        title="运行配置"
+        placement="bottom"
+        size="82%"
+    >
+        <div class="mobile-run-form">
+            <label class="mobile-run-label">目标设备</label>
+            <el-checkbox-group v-model="runForm.deviceSerials" class="mobile-device-checks">
+                <el-checkbox
+                    v-for="dev in devices"
+                    :key="dev.serial"
+                    :label="dev.serial"
+                    :disabled="!isDeviceSelectable(dev)"
+                    class="mobile-device-check"
+                >
+                    <div class="mobile-device-check-content">
+                        <span>{{ dev.custom_name || dev.market_name || dev.model || dev.serial }}</span>
+                        <el-tag :type="statusTagType(dev.status)" size="small">{{ statusLabel(dev.status) }}</el-tag>
+                    </div>
+                    <small v-if="deviceUnavailableReason(dev)">{{ deviceUnavailableReason(dev) }}</small>
+                </el-checkbox>
+            </el-checkbox-group>
+            <div v-if="hasWdaDownDevice" class="run-warning-hint">
+                检测到 iOS 设备 WDA 异常，需在设备中心先执行“检测WDA”。
+            </div>
+
+            <label class="mobile-run-label">运行环境</label>
+            <el-select v-model="runForm.envId" placeholder="选择环境 (可选)" clearable style="width: 100%">
+                <el-option
+                    v-for="env in environments"
+                    :key="env.id"
+                    :label="env.name"
+                    :value="env.id"
+                />
+            </el-select>
+        </div>
+
+        <template #footer>
+            <div class="mobile-drawer-footer">
+                <el-button @click="runDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="confirmRun">开始执行</el-button>
+            </div>
+        </template>
+    </el-drawer>
 </template>
 
 <style scoped>
@@ -829,5 +943,205 @@ onUnmounted(stopActiveRunPolling)
   display: flex;
   justify-content: flex-end;
   padding-right: 10px;
+}
+
+.mobile-scenario-page {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #f6f7f9;
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.mobile-scenario-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.mobile-search-input {
+    width: 100%;
+}
+
+.mobile-status-filter {
+    margin-bottom: 10px;
+    overflow-x: auto;
+    flex-shrink: 0;
+}
+
+.mobile-scenario-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mobile-scenario-card {
+    position: relative;
+    display: flex;
+    border: 1px solid #ebeef5;
+    border-radius: 8px;
+    background: #ffffff;
+    overflow: hidden;
+}
+
+.mobile-scenario-strip {
+    width: 5px;
+    flex-shrink: 0;
+}
+
+.mobile-scenario-body {
+    min-width: 0;
+    flex: 1;
+    padding: 10px 12px;
+}
+
+.mobile-scenario-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.mobile-scenario-title {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mobile-scenario-title strong {
+    font-size: 15px;
+    color: #303133;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mobile-scenario-info-line {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 12px;
+    color: #909399;
+    white-space: nowrap;
+}
+
+.mobile-scenario-info-line span {
+    min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mobile-scenario-info-line span::after {
+    content: "·";
+    margin-left: 7px;
+    color: #c0c4cc;
+}
+
+.mobile-scenario-info-line span:last-child::after {
+    content: "";
+    margin-left: 0;
+}
+
+.mobile-scenario-actions {
+    margin-top: 9px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.mobile-scenario-actions .el-button {
+    margin-left: 0;
+    min-width: 0;
+}
+
+.mobile-pagination {
+    padding-top: 10px;
+    display: flex;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.mobile-run-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mobile-run-form :deep(.el-select__wrapper),
+.mobile-run-form :deep(.el-input__wrapper) {
+    min-height: 44px;
+    font-size: 16px;
+}
+
+.mobile-run-form :deep(.el-select__placeholder),
+.mobile-run-form :deep(.el-input__inner) {
+    font-size: 16px;
+}
+
+.mobile-run-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #303133;
+}
+
+.mobile-device-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mobile-device-check {
+    margin-right: 0;
+    border: 1px solid #ebeef5;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fff;
+}
+
+.mobile-device-check :deep(.el-checkbox__label) {
+    flex: 1;
+    min-width: 0;
+}
+
+.mobile-device-check-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.mobile-device-check-content span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mobile-device-check small {
+    display: block;
+    margin-top: 4px;
+    color: #e6a23c;
+}
+
+.mobile-drawer-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.mobile-drawer-footer .el-button {
+    margin-left: 0;
 }
 </style>

@@ -328,6 +328,9 @@ export default {
     unlockDevice(serial) {
         return api.post(`/devices/${serial}/unlock`)
     },
+    stopDeviceExecution(serial) {
+        return api.post(`/devices/${serial}/unlock`)
+    },
     rebootDevice(serial) {
         return api.post(`/devices/${serial}/reboot`)
     },
