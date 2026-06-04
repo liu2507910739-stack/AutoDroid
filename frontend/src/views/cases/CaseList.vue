@@ -1,13 +1,15 @@
 <script setup>
-import { ref, onActivated, onDeactivated, onUnmounted, reactive, nextTick } from 'vue'
+import { ref, onActivated, onDeactivated, onUnmounted, reactive, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, VideoPlay, CopyDocument, Delete, Search, Refresh, Edit, ArrowDown, FolderAdd, EditPen, Document, FolderOpened, CircleClose } from '@element-plus/icons-vue'
 import api from '@/api'
+import { useUserStore } from '@/stores/useUserStore'
 import dayjs from 'dayjs'
 import { useClientMode } from '@/composables/useClientMode'
 
 const router = useRouter()
+const userStore = useUserStore()
 const { isMobileMode } = useClientMode()
 
 // ==================== Folder Tree ====================
@@ -149,6 +151,8 @@ const selectedCases = ref([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const currentUser = computed(() => userStore.userInfo || {})
+const isAdmin = computed(() => currentUser.value.role === 'admin')
 const activeCaseRuns = ref({})
 let activeRunTimer = null
 
@@ -205,6 +209,20 @@ const handleCurrentChange = (val) => {
 const handleSelectionChange = (val) => {
     selectedCases.value = val
 }
+
+const canDeleteCase = (row) => {
+    if (!row) return false
+    if (isAdmin.value) return true
+    return row.user_id !== null && row.user_id !== undefined && row.user_id === currentUser.value.id
+}
+
+const deletePermissionTip = (row) => {
+    return canDeleteCase(row) ? '删除' : '仅创建人或管理员可以删除'
+}
+
+const selectedHasUnauthorizedCase = computed(() => {
+    return selectedCases.value.some(item => !canDeleteCase(item))
+})
 
 const handleCreate = () => {
     const query = {}
@@ -470,6 +488,10 @@ const handleClone = async (row) => {
 }
 
 const handleDelete = (row) => {
+    if (!canDeleteCase(row)) {
+        ElMessage.warning('仅创建人或管理员可以删除')
+        return
+    }
     ElMessageBox.confirm('确定要删除该测试用例吗？', '警告', {
         confirmButtonText: '删除',
         cancelButtonText: '取消',
@@ -481,13 +503,17 @@ const handleDelete = (row) => {
             fetchCases()
             fetchFolderTree()
         } catch (err) {
-            ElMessage.error('删除失败: ' + err.message)
+            ElMessage.error('删除失败: ' + (err.response?.data?.detail || err.message))
         }
     })
 }
 
 const handleBatchDelete = () => {
     if (selectedCases.value.length === 0) return
+    if (selectedHasUnauthorizedCase.value) {
+        ElMessage.warning('仅能删除自己创建的用例')
+        return
+    }
     ElMessageBox.confirm(`确定要删除选中的 ${selectedCases.value.length} 个用例吗？`, '警告', {
         confirmButtonText: '批量删除',
         cancelButtonText: '取消',
@@ -502,7 +528,7 @@ const handleBatchDelete = () => {
             fetchCases()
             fetchFolderTree()
         } catch (err) {
-            ElMessage.error('批量删除部分失败: ' + err.message)
+            ElMessage.error('批量删除部分失败: ' + (err.response?.data?.detail || err.message))
             fetchCases()
         } finally {
             loading.value = false
@@ -694,9 +720,13 @@ onUnmounted(stopActiveRunPolling)
                         </div>
 
                         <div class="right-tools">
-                            <el-button type="danger" plain :icon="Delete" :disabled="selectedCases.length === 0" @click="handleBatchDelete">
-                                批量删除
-                            </el-button>
+                            <el-tooltip :content="selectedHasUnauthorizedCase ? '仅能删除自己创建的用例' : '批量删除'" placement="top">
+                                <span class="button-tooltip-wrap">
+                                    <el-button type="danger" plain :icon="Delete" :disabled="selectedCases.length === 0 || selectedHasUnauthorizedCase" @click="handleBatchDelete">
+                                        批量删除
+                                    </el-button>
+                                </span>
+                            </el-tooltip>
                             <el-button type="primary" :icon="Plus" @click="handleCreate">新建用例</el-button>
                         </div>
                     </div>
@@ -775,23 +805,33 @@ onUnmounted(stopActiveRunPolling)
 
                             <el-table-column label="操作" width="180" align="center" fixed="right">
                                 <template #default="{ row }">
-                                    <el-tooltip content="后台运行" placement="top">
-                                        <el-button
-                                            :icon="isCaseRunActive(row) ? CircleClose : VideoPlay"
-                                            link
-                                            :type="isCaseRunActive(row) ? 'danger' : 'success'"
-                                            @click="handleRunClick(row)"
-                                        />
-                                    </el-tooltip>
-                                    <el-tooltip content="编辑" placement="top">
-                                        <el-button :icon="Edit" link type="primary" @click="handleEdit(row)" />
-                                    </el-tooltip>
-                                    <el-tooltip content="克隆" placement="top">
-                                        <el-button :icon="CopyDocument" link type="primary" @click="handleClone(row)" />
-                                    </el-tooltip>
-                                    <el-tooltip content="删除" placement="top">
-                                        <el-button :icon="Delete" link type="danger" @click="handleDelete(row)" />
-                                    </el-tooltip>
+                                    <div class="case-action-buttons">
+                                        <el-tooltip content="后台运行" placement="top">
+                                            <span class="button-tooltip-wrap">
+                                                <el-button
+                                                    :icon="isCaseRunActive(row) ? CircleClose : VideoPlay"
+                                                    link
+                                                    :type="isCaseRunActive(row) ? 'danger' : 'success'"
+                                                    @click="handleRunClick(row)"
+                                                />
+                                            </span>
+                                        </el-tooltip>
+                                        <el-tooltip content="编辑" placement="top">
+                                            <span class="button-tooltip-wrap">
+                                                <el-button :icon="Edit" link type="primary" @click="handleEdit(row)" />
+                                            </span>
+                                        </el-tooltip>
+                                        <el-tooltip content="克隆" placement="top">
+                                            <span class="button-tooltip-wrap">
+                                                <el-button :icon="CopyDocument" link type="primary" @click="handleClone(row)" />
+                                            </span>
+                                        </el-tooltip>
+                                        <el-tooltip :content="deletePermissionTip(row)" placement="top">
+                                            <span class="button-tooltip-wrap">
+                                                <el-button :icon="Delete" link type="danger" :disabled="!canDeleteCase(row)" @click="handleDelete(row)" />
+                                            </span>
+                                        </el-tooltip>
+                                    </div>
                                 </template>
                             </el-table-column>
                         </el-table>
@@ -1017,6 +1057,25 @@ onUnmounted(stopActiveRunPolling)
 
 .tree-node:hover .env-item-actions {
     opacity: 1;
+}
+
+.button-tooltip-wrap {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+.case-action-buttons {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    line-height: 1;
+}
+
+.case-action-buttons :deep(.el-button) {
+    margin-left: 0;
 }
 
 /* Existing case node inner spacing styles */

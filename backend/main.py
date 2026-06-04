@@ -201,7 +201,7 @@ class _RecordingIOSSessionPool:
 
 _recording_ios_session_pool = _RecordingIOSSessionPool()
 
-from .database import engine, create_db_and_tables, get_session
+from .database import backfill_legacy_asset_owners, engine, create_db_and_tables, get_session
 from backend.core.security import get_password_hash
 from backend.models import User
 from backend.cross_platform_execution import (
@@ -344,14 +344,16 @@ def on_startup():
         statement = select(User).where(User.username == "admin")
         user = session.exec(statement).first()
         if not user:
-            admin_user = User(
+            user = User(
                 username="admin",
                 hashed_password=get_password_hash("123456"),
                 role="admin",
                 full_name="Administrator"
             )
-            session.add(admin_user)
+            session.add(user)
             session.commit()
+            session.refresh(user)
+        backfill_legacy_asset_owners(session, user.id)
 
     # 初始化定时任务调度器并恢复活跃任务
     _restore_scheduled_tasks()
