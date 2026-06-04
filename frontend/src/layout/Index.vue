@@ -1,10 +1,16 @@
 <script setup>
 import { computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/useUserStore'
 import Navbar from './components/Navbar.vue'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
+
+const canShowRoute = (routeRecord) => {
+  return !routeRecord.meta?.requiresAdmin || userStore.isAdmin
+}
 
 /**
  * 从路由配置中提取菜单路由
@@ -13,7 +19,7 @@ const router = useRouter()
 const menuRoutes = computed(() => {
   const layoutRoute = router.options.routes.find(r => r.path === '/')
   if (!layoutRoute || !layoutRoute.children) return []
-  return layoutRoute.children.filter(r => r.meta && !r.meta.hidden)
+  return layoutRoute.children.filter(r => r.meta && !r.meta.hidden && canShowRoute(r))
 })
 
 /**
@@ -21,7 +27,7 @@ const menuRoutes = computed(() => {
  */
 const getVisibleChildren = (route) => {
   if (!route.children) return []
-  return route.children.filter(child => !child.meta?.hidden)
+  return route.children.filter(child => !child.meta?.hidden && canShowRoute(child))
 }
 </script>
 

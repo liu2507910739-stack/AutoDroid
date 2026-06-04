@@ -63,7 +63,7 @@
         </el-form>
         
         <div class="form-footer">
-          <router-link to="/register" class="register-link">没有账号？去注册</router-link>
+          <router-link v-if="allowRegistration" to="/register" class="register-link">没有账号？去注册</router-link>
         </div>
       </div>
     </div>
@@ -71,16 +71,18 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/useUserStore'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import api from '@/api'
 
 const router = useRouter()
 const userStore = useUserStore()
 const loginFormRef = ref(null)
 const loading = ref(false)
+const allowRegistration = ref(true)
 
 const loginForm = reactive({
   username: '',
@@ -90,6 +92,15 @@ const loginForm = reactive({
 const loginRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+}
+
+const loadRegistrationStatus = async () => {
+  try {
+    const res = await api.getRegistrationStatus()
+    allowRegistration.value = res.data?.allow_registration !== false
+  } catch (error) {
+    allowRegistration.value = true
+  }
 }
 
 const handleLogin = async () => {
@@ -110,6 +121,8 @@ const handleLogin = async () => {
     }
   })
 }
+
+onMounted(loadRegistrationStatus)
 </script>
 
 <style scoped>

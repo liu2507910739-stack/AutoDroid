@@ -21,8 +21,18 @@
           <h2 class="title">AutoDroid</h2>
           <p class="subtitle">UI自动化测试平台</p>
         </div>
+
+        <el-alert
+          v-if="!registrationAllowed"
+          title="当前已关闭公开注册，请联系管理员创建账号。"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="registration-alert"
+        />
         
         <el-form 
+          v-if="registrationAllowed"
           ref="formRef"
           :model="form"
           :rules="rules"
@@ -93,7 +103,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Lock, Avatar } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -102,6 +112,7 @@ import api from '@/api'
 const router = useRouter()
 const formRef = ref(null)
 const loading = ref(false)
+const registrationAllowed = ref(true)
 
 const form = reactive({
   username: '',
@@ -123,11 +134,27 @@ const validatePass2 = (rule, value, callback) => {
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   name: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码至少 6 位', trigger: 'blur' }
+  ],
   confirmPassword: [{ validator: validatePass2, trigger: 'blur' }]
 }
 
+const loadRegistrationStatus = async () => {
+  try {
+    const res = await api.getRegistrationStatus()
+    registrationAllowed.value = res.data?.allow_registration !== false
+  } catch (error) {
+    registrationAllowed.value = true
+  }
+}
+
 const handleRegister = async () => {
+  if (!registrationAllowed.value) {
+    ElMessage.warning('当前已关闭公开注册，请联系管理员创建账号')
+    return
+  }
   if (!formRef.value) return
   
   await formRef.value.validate(async (valid) => {
@@ -149,6 +176,8 @@ const handleRegister = async () => {
     }
   })
 }
+
+onMounted(loadRegistrationStatus)
 </script>
 
 <style scoped>
@@ -289,6 +318,10 @@ const handleRegister = async () => {
 
 .form-header {
   margin-bottom: 32px;
+}
+
+.registration-alert {
+  margin-bottom: 20px;
 }
 
 .title {

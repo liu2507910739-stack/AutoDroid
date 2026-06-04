@@ -2,10 +2,19 @@
 import { useUserStore } from '@/stores/useUserStore'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { SwitchButton } from '@element-plus/icons-vue'
+import { ArrowDown, Lock, SwitchButton } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const router = useRouter()
+
+const handleCommand = (command) => {
+  if (command === 'password') {
+    router.push('/account/password')
+  }
+  if (command === 'logout') {
+    handleLogout()
+  }
+}
 
 const handleLogout = () => {
   ElMessageBox.confirm('确定要退出登录吗？', '提示', {
@@ -25,10 +34,24 @@ const handleLogout = () => {
       <div class="brand">AutoDroid</div>
     </div>
     <div class="right-menu">
-      <span class="user-name">Hi, {{ userStore.userInfo?.full_name || userStore.userInfo?.username }}</span>
-      <el-button type="danger" link :icon="SwitchButton" @click="handleLogout" class="logout-btn">
-        退出
-      </el-button>
+      <el-dropdown trigger="click" @command="handleCommand">
+        <button class="user-trigger" type="button">
+          <span class="user-name">Hi, {{ userStore.userInfo?.full_name || userStore.userInfo?.username }}</span>
+          <el-icon class="arrow-icon"><ArrowDown /></el-icon>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="password">
+              <el-icon><Lock /></el-icon>
+              修改密码
+            </el-dropdown-item>
+            <el-dropdown-item command="logout" divided>
+              <el-icon><SwitchButton /></el-icon>
+              退出登录
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
   </div>
 </template>
@@ -56,19 +79,31 @@ const handleLogout = () => {
   align-items: center;
 }
 
-.user-name {
-  font-size: 14px;
-  margin-right: 15px;
-  font-weight: 500;
+.user-trigger {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
   color: #E6E8EB;
+  cursor: pointer;
+  font: inherit;
 }
 
-.logout-btn {
-  font-size: 16px;
-  color: #F56C6C;
+.user-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.08);
 }
-.logout-btn:hover {
-  background-color: transparent;
-  opacity: 0.8;
+
+.user-name {
+  font-size: 14px;
+  font-weight: 500;
 }
+
+.arrow-icon {
+  font-size: 12px;
+}
+
 </style>
