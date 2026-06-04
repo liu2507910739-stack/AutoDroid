@@ -3,6 +3,7 @@ import { useUserStore } from '@/stores/useUserStore'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { ArrowDown, Lock, SwitchButton } from '@element-plus/icons-vue'
+import ClientModeSwitch from '@/components/ClientModeSwitch.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -34,6 +35,7 @@ const handleLogout = () => {
       <div class="brand">AutoDroid</div>
     </div>
     <div class="right-menu">
+      <ClientModeSwitch light />
       <el-dropdown trigger="click" @command="handleCommand">
         <button class="user-trigger" type="button">
           <span class="user-name">Hi, {{ userStore.userInfo?.full_name || userStore.userInfo?.username }}</span>
@@ -77,6 +79,7 @@ const handleLogout = () => {
 .right-menu {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .user-trigger {

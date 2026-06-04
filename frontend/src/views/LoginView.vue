@@ -1,21 +1,9 @@
 <template>
   <div class="split-container">
-    <!-- 左侧：黑白灰几何拼接 (Geometric Splicing) -->
-    <div class="left-panel abstract-grid">
-      <div class="grid-item bg-black">
-        <div class="decorative-text">AUTODROID</div>
-      </div>
-      <div class="grid-item bg-white">
-        <div class="circle-accent"></div>
-      </div>
-      <div class="grid-item bg-gray-light"></div>
-      <div class="grid-item bg-gray-dark">
-        <div class="line-accent"></div>
-      </div>
-    </div>
-
-    <!-- 右侧：登录表单 -->
     <div class="right-panel">
+      <div class="mode-switch-wrap">
+        <ClientModeSwitch />
+      </div>
       <div class="form-wrapper">
         <div class="form-header">
           <h2 class="title">AutoDroid</h2>
@@ -77,6 +65,7 @@ import { useUserStore } from '../stores/useUserStore'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
+import ClientModeSwitch from '@/components/ClientModeSwitch.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -128,114 +117,46 @@ onMounted(loadRegistrationStatus)
 <style scoped>
 .split-container {
   display: flex;
-  height: 100vh;
-  width: 100vw;
-  background-color: #ffffff;
-  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  width: 100%;
+  padding: 24px;
+  background:
+    linear-gradient(90deg, rgba(9, 9, 11, 0.035) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(9, 9, 11, 0.035) 1px, transparent 1px),
+    #f5f7fa;
+  background-size: 28px 28px;
+  overflow-y: auto;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* --- 左侧拼接设计 --- */
-.left-panel {
-  flex: 1;
-  display: none; /* 移动端隐藏 */
-}
-@media (min-width: 900px) {
-  .left-panel {
-    display: block;
-  }
-}
-
-.abstract-grid {
-  display: grid;
-  grid-template-columns: 55% 45%;
-  grid-template-rows: 35% 45% 20%;
-  height: 100%;
-  width: 100%;
-}
-
-.bg-black {
-  background-color: #09090b;
-  grid-column: 1 / 2;
-  grid-row: 1 / 3;
-  position: relative;
-}
-
-.bg-white {
-  background-color: #ffffff;
-  grid-column: 2 / 3;
-  grid-row: 1 / 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.bg-gray-light {
-  background-color: #f4f4f5;
-  grid-column: 2 / 3;
-  grid-row: 2 / 4;
-}
-
-.bg-gray-dark {
-  background-color: #27272a;
-  grid-column: 1 / 2;
-  grid-row: 3 / 4;
-  position: relative;
-}
-
-/* 装饰元素 */
-.circle-accent {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background-color: #09090b;
-}
-
-.decorative-text {
-  position: absolute;
-  bottom: 40px;
-  right: -32px;
-  color: #ffffff;
-  font-size: 64px;
-  font-weight: 800;
-  letter-spacing: -2px;
-  transform: rotate(-90deg);
-  transform-origin: bottom right;
-  opacity: 0.1;
-  user-select: none;
-}
-
-.line-accent {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 30%;
-  height: 2px;
-  background-color: #ffffff;
-  opacity: 0.8;
-}
-
-/* --- 右侧表单 --- */
 .right-panel {
-  flex: 1;
-  max-width: 600px;
+  width: 100%;
+  min-height: calc(100dvh - 48px);
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #ffffff;
-  padding: 40px;
+  position: relative;
+}
+
+.mode-switch-wrap {
+  position: absolute;
+  top: 20px;
+  right: 20px;
 }
 
 .form-wrapper {
   width: 100%;
   max-width: 400px;
-  background-color: #f4f4f5;
+  background-color: #ffffff;
   padding: 40px;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
   border: 1px solid #e4e4e7;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  overflow: hidden;
 }
 
 .form-wrapper::before {
@@ -245,24 +166,19 @@ onMounted(loadRegistrationStatus)
   left: 0;
   width: 100%;
   height: 3px;
-  background-color: transparent;
-  transition: background-color 0.3s ease;
-  border-top-left-radius: 16px;
-  border-top-right-radius: 16px;
+  background-color: #09090b;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
 }
 
 .form-wrapper:hover {
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
+  box-shadow: 0 22px 56px rgba(15, 23, 42, 0.15);
   border-color: #e4e4e7;
-}
-
-.form-wrapper:hover::before {
-  background-color: #09090b;
 }
 
 .form-header {
   margin-bottom: 32px;
+  text-align: center;
 }
 
 .title {
@@ -270,7 +186,7 @@ onMounted(loadRegistrationStatus)
   font-weight: 700;
   color: #000000;
   margin: 0 0 8px 0;
-  letter-spacing: -0.5px;
+  letter-spacing: 0;
 }
 
 .subtitle {
@@ -289,6 +205,7 @@ onMounted(loadRegistrationStatus)
   border-radius: 6px;
   background-color: #fafafa;
   padding: 0 15px;
+  font-size: 16px;
   transition: all 0.2s ease;
 }
 
@@ -299,7 +216,7 @@ onMounted(loadRegistrationStatus)
 }
 
 :deep(.minimal-input .el-input__inner) {
-  font-size: 15px;
+  font-size: 16px;
   height: 48px;
   color: #09090b;
 }
@@ -360,5 +277,21 @@ onMounted(loadRegistrationStatus)
 .register-link:hover {
   color: #52525b;
   text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .split-container {
+    min-height: 100dvh;
+    padding: 16px;
+  }
+
+  .right-panel {
+    min-height: calc(100dvh - 32px);
+  }
+
+  .form-wrapper {
+    padding: 28px 22px;
+    border-radius: 8px;
+  }
 }
 </style>

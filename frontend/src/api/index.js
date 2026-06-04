@@ -78,6 +78,12 @@ export default {
         const qsStr = qs.length ? `?${qs.join('&')}` : ''
         return api.post(`/cases/${id}/run${qsStr}`)
     },
+    runTestCaseBatch(id, envId, deviceSerials) {
+        return api.post(`/cases/${id}/run-batch`, {
+            env_id: envId || null,
+            device_serials: Array.isArray(deviceSerials) ? deviceSerials : (deviceSerials ? [deviceSerials] : [])
+        })
+    },
     precheckTestCase(id, envId, deviceSerial) {
         let qs = []
         if (envId) qs.push(`env_id=${envId}`)
@@ -230,6 +236,12 @@ export default {
     deleteBatch(batchId) {
         return api.delete(`/reports/batch/${batchId}`)
     },
+    cancelRun(data) {
+        return api.post('/runs/cancel', data)
+    },
+    getActiveRuns(kind, targetId) {
+        return api.get('/runs/active', { params: { kind, target_id: targetId } })
+    },
 
     // Tasks (定时任务)
     getTasks() {
@@ -337,6 +349,9 @@ export default {
         return api.get(`/devices/${serial}/screenshot`, { timeout: 30000 })
     },
     unlockDevice(serial) {
+        return api.post(`/devices/${serial}/unlock`)
+    },
+    stopDeviceExecution(serial) {
         return api.post(`/devices/${serial}/unlock`)
     },
     rebootDevice(serial) {
