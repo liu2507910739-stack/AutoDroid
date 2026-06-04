@@ -1,5 +1,5 @@
 <template>
-  <div class="split-container">
+  <div class="split-container" :class="{ 'is-mobile-mode': isMobileMode }">
     <!-- 左侧：黑白灰几何拼接 (Geometric Splicing) -->
     <div class="left-panel abstract-grid">
       <div class="grid-item bg-black">
@@ -81,9 +81,11 @@ import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import ClientModeSwitch from '@/components/ClientModeSwitch.vue'
+import { useClientMode } from '@/composables/useClientMode'
 
 const router = useRouter()
 const userStore = useUserStore()
+const { isMobileMode } = useClientMode()
 const loginFormRef = ref(null)
 const loading = ref(false)
 const allowRegistration = ref(true)
@@ -366,6 +368,67 @@ onMounted(loadRegistrationStatus)
 .register-link:hover {
   color: #52525b;
   text-decoration: underline;
+}
+
+.split-container.is-mobile-mode {
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  height: auto;
+  width: 100%;
+  padding: 16px;
+  background:
+    linear-gradient(90deg, rgba(9, 9, 11, 0.035) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(9, 9, 11, 0.035) 1px, transparent 1px),
+    #f5f7fa;
+  background-size: 28px 28px;
+  overflow-y: auto;
+}
+
+.split-container.is-mobile-mode .left-panel {
+  display: none;
+}
+
+.split-container.is-mobile-mode .right-panel {
+  width: 100%;
+  min-height: calc(100dvh - 32px);
+  max-width: none;
+  padding: 0;
+}
+
+.split-container.is-mobile-mode .mode-switch-wrap {
+  display: block;
+}
+
+.split-container.is-mobile-mode .form-wrapper {
+  background-color: #ffffff;
+  padding: 28px 22px;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+.split-container.is-mobile-mode .form-wrapper::before {
+  background-color: #09090b;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.split-container.is-mobile-mode .form-wrapper:hover {
+  transform: none;
+  box-shadow: 0 22px 56px rgba(15, 23, 42, 0.15);
+}
+
+.split-container.is-mobile-mode .form-header {
+  text-align: center;
+}
+
+.split-container.is-mobile-mode :deep(.minimal-input .el-input__wrapper) {
+  font-size: 16px;
+}
+
+.split-container.is-mobile-mode :deep(.minimal-input .el-input__inner) {
+  font-size: 16px;
 }
 
 @media (max-width: 899px) {
