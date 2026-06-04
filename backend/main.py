@@ -242,6 +242,7 @@ if STATIC_DIR.exists():
     app.mount("/api/static", StaticFiles(directory=str(STATIC_DIR)), name="api_static")
 
 from backend.api import auth, cases
+from backend.api import admin
 
 from backend.api import folders
 from backend.api import scenarios
@@ -266,6 +267,7 @@ def _register_http_routers(
     reports_prefix: str = "/reports",
 ) -> None:
     target.include_router(auth.router, prefix="/auth", tags=["auth"], include_in_schema=include_in_schema)
+    target.include_router(admin.router, prefix="/admin", tags=["admin"], include_in_schema=include_in_schema)
     target.include_router(cases.router, prefix="/cases", tags=["cases"], include_in_schema=include_in_schema)
     target.include_router(folders.router, prefix="/folders", tags=["folders"], include_in_schema=include_in_schema)
     target.include_router(scenarios.router, prefix="/scenarios", tags=["scenarios"], include_in_schema=include_in_schema)

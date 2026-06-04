@@ -47,8 +47,14 @@ export default {
     register(data) {
         return api.post('/auth/register', data)
     },
+    getRegistrationStatus() {
+        return api.get('/auth/registration-status')
+    },
     getUserInfo() {
         return api.get('/auth/users/me')
+    },
+    changePassword(data) {
+        return api.put('/auth/password', data)
     },
 
     // Cases
@@ -263,6 +269,23 @@ export default {
     },
     sendTestNotification(webhookUrl) {
         return api.post('/settings/test-notification', { webhook_url: webhookUrl })
+    },
+
+    // Admin (用户管理)
+    getAdminRegistrationSettings() {
+        return api.get('/admin/registration-settings')
+    },
+    updateAdminRegistrationSettings(allowRegistration) {
+        return api.put('/admin/registration-settings', { allow_registration: allowRegistration })
+    },
+    getAdminUsers(params) {
+        return api.get('/admin/users', { params })
+    },
+    createAdminUser(data) {
+        return api.post('/admin/users', data)
+    },
+    updateAdminUserStatus(id, isActive) {
+        return api.patch(`/admin/users/${id}/status`, { is_active: isActive })
     },
 
     // Fastbot (性能测试)

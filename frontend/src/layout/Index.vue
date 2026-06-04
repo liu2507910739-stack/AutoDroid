@@ -12,6 +12,10 @@ import { Collection, DataAnalysis, Files, Monitor, Odometer } from '@element-plu
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+
+const canShowRoute = (routeRecord) => {
+  return !routeRecord.meta?.requiresAdmin || userStore.isAdmin
+}
 const { isMobileMode } = useClientMode()
 
 /**
@@ -21,7 +25,7 @@ const { isMobileMode } = useClientMode()
 const menuRoutes = computed(() => {
   const layoutRoute = router.options.routes.find(r => r.path === '/')
   if (!layoutRoute || !layoutRoute.children) return []
-  return layoutRoute.children.filter(r => r.meta && !r.meta.hidden)
+  return layoutRoute.children.filter(r => r.meta && !r.meta.hidden && canShowRoute(r))
 })
 
 /**
@@ -29,7 +33,7 @@ const menuRoutes = computed(() => {
  */
 const getVisibleChildren = (route) => {
   if (!route.children) return []
-  return route.children.filter(child => !child.meta?.hidden)
+  return route.children.filter(child => !child.meta?.hidden && canShowRoute(child))
 }
 
 const mobileNavItems = computed(() => [
