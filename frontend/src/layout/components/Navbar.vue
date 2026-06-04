@@ -3,6 +3,7 @@ import { useUserStore } from '@/stores/useUserStore'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { SwitchButton } from '@element-plus/icons-vue'
+import ClientModeSwitch from '@/components/ClientModeSwitch.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -25,6 +26,7 @@ const handleLogout = () => {
       <div class="brand">AutoDroid</div>
     </div>
     <div class="right-menu">
+      <ClientModeSwitch light />
       <span class="user-name">Hi, {{ userStore.userInfo?.full_name || userStore.userInfo?.username }}</span>
       <el-button type="danger" link :icon="SwitchButton" @click="handleLogout" class="logout-btn">
         退出
@@ -54,11 +56,11 @@ const handleLogout = () => {
 .right-menu {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .user-name {
   font-size: 14px;
-  margin-right: 15px;
   font-weight: 500;
   color: #E6E8EB;
 }

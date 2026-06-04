@@ -1,14 +1,16 @@
 <script setup>
-import { ref, onActivated, reactive, nextTick, computed } from 'vue'
+import { ref, onActivated, onDeactivated, onUnmounted, reactive, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, VideoPlay, CopyDocument, Delete, Search, Refresh, Edit, ArrowDown, FolderAdd, EditPen, Document, FolderOpened } from '@element-plus/icons-vue'
+import { Plus, VideoPlay, CopyDocument, Delete, Search, Refresh, Edit, ArrowDown, FolderAdd, EditPen, Document, FolderOpened, CircleClose } from '@element-plus/icons-vue'
 import api from '@/api'
 import { useUserStore } from '@/stores/useUserStore'
 import dayjs from 'dayjs'
+import { useClientMode } from '@/composables/useClientMode'
 
 const router = useRouter()
 const userStore = useUserStore()
+const { isMobileMode } = useClientMode()
 
 // ==================== Folder Tree ====================
 const folderTree = ref([])
@@ -151,6 +153,8 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const currentUser = computed(() => userStore.userInfo || {})
 const isAdmin = computed(() => currentUser.value.role === 'admin')
+const activeCaseRuns = ref({})
+let activeRunTimer = null
 
 const queryParams = reactive({
     keyword: ''
@@ -176,6 +180,7 @@ const fetchCases = async () => {
         total.value = res.data.total || 0
 
         cases.value = data
+        restoreActiveCaseRuns()
     } catch (err) {
         console.error('Fetch error:', err)
         errorMsg.value = err.message || '未知错误'
@@ -323,6 +328,7 @@ const normalizeCaseRunStatus = (status) => {
     if (normalized === 'fail' || normalized === 'failed' || normalized === 'error') return 'FAIL'
     if (normalized === 'warning') return 'WARNING'
     if (normalized === 'running' || normalized === 'running...') return 'RUNNING'
+    if (normalized === 'aborted' || normalized === 'cancelled') return 'ABORTED'
     return ''
 }
 
@@ -332,10 +338,17 @@ const caseRunStatusTagType = (status) => {
     if (normalized === 'WARNING') return 'warning'
     if (normalized === 'FAIL') return 'danger'
     if (normalized === 'RUNNING') return 'info'
+    if (normalized === 'ABORTED') return 'info'
     return 'info'
 }
 
-const handleRunClick = (row) => {
+const isCaseRunActive = (row) => Boolean(activeCaseRuns.value[row.id])
+
+const handleRunClick = async (row) => {
+    if (isCaseRunActive(row)) {
+        await terminateCaseRun(row)
+        return
+    }
     runningCaseId.value = row.id
     runDialogVisible.value = true
     // Fetch and retain previous selections if valid, else pick defaults
@@ -364,10 +377,7 @@ const confirmRun = async () => {
             return
         }
 
-        const promises = runnable.map(serial =>
-            api.runTestCaseAsync(runningCaseId.value, runForm.envId, serial)
-        )
-        await Promise.all(promises)
+        const { data } = await api.runTestCaseBatch(runningCaseId.value, runForm.envId, runnable)
 
         if (blocked.length > 0) {
             const first = blocked[0]
@@ -379,8 +389,90 @@ const confirmRun = async () => {
         // Update the item status optimistically
         const caseItem = cases.value.find(c => c.id === runningCaseId.value)
         if (caseItem) caseItem.last_run_status = 'RUNNING'
+        activeCaseRuns.value = {
+            ...activeCaseRuns.value,
+            [runningCaseId.value]: {
+                batch_id: data?.batch_id,
+                run_ids: data?.run_ids || [],
+                device_serials: runnable
+            }
+        }
+        startActiveRunPolling()
     } catch (err) {
         ElMessage.error('启动批量执行失败: ' + err.message)
+    }
+}
+
+const terminateCaseRun = async (row) => {
+    const active = activeCaseRuns.value[row.id]
+    if (!active) return
+    try {
+        await api.cancelRun({
+            kind: 'case',
+            target_id: row.id,
+            batch_id: active.batch_id || null,
+            run_ids: active.run_ids || [],
+            device_serials: active.device_serials || []
+        })
+        ElMessage.warning('已发送终止请求')
+        row.last_run_status = 'ABORTED'
+        const next = { ...activeCaseRuns.value }
+        delete next[row.id]
+        activeCaseRuns.value = next
+    } catch (err) {
+        ElMessage.error('终止失败: ' + (err.response?.data?.detail || err.message))
+    }
+}
+
+const restoreActiveCaseRuns = async () => {
+    const runningRows = cases.value.filter(row => normalizeCaseRunStatus(row.last_run_status) === 'RUNNING')
+    if (runningRows.length === 0) return
+    const next = { ...activeCaseRuns.value }
+    for (const row of runningRows) {
+        try {
+            const { data } = await api.getActiveRuns('case', row.id)
+            const items = data?.items || []
+            if (items.length > 0) {
+                next[row.id] = {
+                    batch_id: items[0]?.batch_id,
+                    run_ids: items.map(item => item.run_id).filter(Boolean),
+                    device_serials: items.map(item => item.device_serial).filter(Boolean)
+                }
+            }
+        } catch {}
+    }
+    activeCaseRuns.value = next
+    if (Object.keys(next).length > 0) startActiveRunPolling()
+}
+
+const startActiveRunPolling = () => {
+    stopActiveRunPolling()
+    activeRunTimer = setInterval(async () => {
+        const entries = Object.entries(activeCaseRuns.value)
+        if (entries.length === 0) {
+            stopActiveRunPolling()
+            return
+        }
+        const next = { ...activeCaseRuns.value }
+        let changed = false
+        for (const [caseId] of entries) {
+            try {
+                const { data } = await api.getActiveRuns('case', Number(caseId))
+                if ((data?.items || []).length === 0) {
+                    delete next[caseId]
+                    changed = true
+                }
+            } catch {}
+        }
+        activeCaseRuns.value = next
+        if (changed) fetchCases()
+    }, 3000)
+}
+
+const stopActiveRunPolling = () => {
+    if (activeRunTimer) {
+        clearInterval(activeRunTimer)
+        activeRunTimer = null
     }
 }
 
@@ -482,10 +574,73 @@ onActivated(() => {
     fetchFolderTree()
     fetchCases()
 })
+
+onDeactivated(stopActiveRunPolling)
+onUnmounted(stopActiveRunPolling)
 </script>
 
 <template>
-    <div class="case-list-container">
+    <div v-if="isMobileMode" class="mobile-case-page">
+        <div class="mobile-case-toolbar">
+            <el-input
+                v-model="queryParams.keyword"
+                placeholder="搜索用例..."
+                class="mobile-search-input"
+                :prefix-icon="Search"
+                clearable
+                @keyup.enter="handleSearch"
+                @clear="handleSearch"
+            />
+            <el-button :icon="Refresh" circle @click="fetchCases" />
+        </div>
+
+        <div class="mobile-case-list" v-loading="loading">
+            <article
+                v-for="item in cases"
+                :key="item.id"
+                class="mobile-case-card"
+            >
+                <div class="mobile-case-card-header">
+                    <div class="mobile-case-title">
+                        <strong>{{ item.name }}</strong>
+                        <span>ID #{{ item.id }}</span>
+                    </div>
+                    <el-tag
+                        v-if="normalizeCaseRunStatus(item.last_run_status)"
+                        :type="caseRunStatusTagType(item.last_run_status)"
+                        size="small"
+                    >
+                        {{ normalizeCaseRunStatus(item.last_run_status) }}
+                    </el-tag>
+                </div>
+
+                <div class="mobile-case-meta">
+                    <span>优先级：{{ getPriority(item.tags) || '无' }}</span>
+                    <span>更新：{{ formatTime(item.updated_at) }}</span>
+                </div>
+
+                <div class="mobile-case-actions">
+                    <el-button type="primary" :icon="VideoPlay" @click="handleRunClick(item)">
+                        执行用例
+                    </el-button>
+                </div>
+            </article>
+            <el-empty v-if="!loading && cases.length === 0" description="暂无用例" :image-size="90" />
+        </div>
+
+        <div class="mobile-pagination" v-if="total > 0">
+            <el-pagination
+                v-model:current-page="currentPage"
+                :page-size="pageSize"
+                :background="true"
+                layout="prev, pager, next"
+                :total="total"
+                @current-change="handleCurrentChange"
+            />
+        </div>
+    </div>
+
+    <div v-else class="case-list-container">
         <el-container class="main-layout">
             <!-- Left: Folder Tree -->
             <el-aside width="200px" class="folder-aside">
@@ -653,7 +808,12 @@ onActivated(() => {
                                     <div class="case-action-buttons">
                                         <el-tooltip content="后台运行" placement="top">
                                             <span class="button-tooltip-wrap">
-                                                <el-button :icon="VideoPlay" link type="success" @click="handleRunClick(row)" />
+                                                <el-button
+                                                    :icon="isCaseRunActive(row) ? CircleClose : VideoPlay"
+                                                    link
+                                                    :type="isCaseRunActive(row) ? 'danger' : 'success'"
+                                                    @click="handleRunClick(row)"
+                                                />
                                             </span>
                                         </el-tooltip>
                                         <el-tooltip content="编辑" placement="top">
@@ -739,6 +899,54 @@ onActivated(() => {
             </template>
         </el-dialog>
     </div>
+
+    <el-drawer
+        v-if="isMobileMode"
+        v-model="runDialogVisible"
+        title="运行配置"
+        placement="bottom"
+        size="82%"
+        class="mobile-run-drawer"
+    >
+        <div class="mobile-run-form">
+            <label class="mobile-run-label">目标设备</label>
+            <el-checkbox-group v-model="runForm.deviceSerials" class="mobile-device-checks">
+                <el-checkbox
+                    v-for="dev in devices"
+                    :key="dev.serial"
+                    :label="dev.serial"
+                    :disabled="!isDeviceSelectable(dev)"
+                    class="mobile-device-check"
+                >
+                    <div class="mobile-device-check-content">
+                        <span>{{ dev.custom_name || dev.market_name || dev.model || dev.serial }}</span>
+                        <el-tag :type="statusTagType(dev.status)" size="small">{{ statusLabel(dev.status) }}</el-tag>
+                    </div>
+                    <small v-if="deviceUnavailableReason(dev)">{{ deviceUnavailableReason(dev) }}</small>
+                </el-checkbox>
+            </el-checkbox-group>
+            <div v-if="hasWdaDownDevice()" class="run-warning-hint">
+                检测到 iOS 设备 WDA 异常，需在设备中心先执行“检测WDA”。
+            </div>
+
+            <label class="mobile-run-label">运行环境</label>
+            <el-select v-model="runForm.envId" placeholder="选择环境 (可选)" clearable style="width: 100%">
+                <el-option
+                    v-for="env in environments"
+                    :key="env.id"
+                    :label="env.name"
+                    :value="env.id"
+                />
+            </el-select>
+        </div>
+
+        <template #footer>
+            <div class="mobile-drawer-footer">
+                <el-button @click="runDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="confirmRun">开始执行</el-button>
+            </div>
+        </template>
+    </el-drawer>
 </template>
 
 <style scoped>
@@ -1003,5 +1211,167 @@ onActivated(() => {
     padding: 12px 10px 0;
     display: flex;
     justify-content: flex-end;
+}
+
+.mobile-case-page {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #f6f7f9;
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.mobile-case-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.mobile-search-input {
+    width: 100%;
+}
+
+.mobile-case-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mobile-case-card {
+    border: 1px solid #ebeef5;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 14px;
+}
+
+.mobile-case-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.mobile-case-title {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mobile-case-title strong {
+    font-size: 15px;
+    color: #303133;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mobile-case-title span,
+.mobile-case-meta {
+    font-size: 12px;
+    color: #909399;
+}
+
+.mobile-case-meta {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mobile-case-actions {
+    margin-top: 12px;
+    display: flex;
+}
+
+.mobile-case-actions .el-button {
+    flex: 1;
+    margin-left: 0;
+}
+
+.mobile-pagination {
+    padding-top: 10px;
+    display: flex;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.mobile-run-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mobile-run-form :deep(.el-select__wrapper),
+.mobile-run-form :deep(.el-input__wrapper) {
+    min-height: 44px;
+    font-size: 16px;
+}
+
+.mobile-run-form :deep(.el-select__placeholder),
+.mobile-run-form :deep(.el-input__inner) {
+    font-size: 16px;
+}
+
+.mobile-run-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #303133;
+}
+
+.mobile-device-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mobile-device-check {
+    margin-right: 0;
+    border: 1px solid #ebeef5;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fff;
+}
+
+.mobile-device-check :deep(.el-checkbox__label) {
+    flex: 1;
+    min-width: 0;
+}
+
+.mobile-device-check-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.mobile-device-check-content span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mobile-device-check small {
+    display: block;
+    margin-top: 4px;
+    color: #e6a23c;
+}
+
+.mobile-drawer-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.mobile-drawer-footer .el-button {
+    margin-left: 0;
 }
 </style>
