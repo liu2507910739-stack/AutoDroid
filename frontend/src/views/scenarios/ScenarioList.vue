@@ -5,15 +5,19 @@ import { Plus, Search, VideoPlay, Edit, Delete, Refresh, MoreFilled,
          Check, Close, Timer } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
+import { useUserStore } from '@/stores/useUserStore'
 import dayjs from 'dayjs'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 // Data
 const scenarios = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
 const filterStatus = ref('all') // all, success, warning, failure
+const currentUser = computed(() => userStore.userInfo || {})
+const isAdmin = computed(() => currentUser.value.role === 'admin')
 
 // Pagination
 const currentPage = ref(1)
@@ -203,6 +207,10 @@ const confirmRun = async () => {
 }
 
 const handleDelete = async (row) => {
+    if (!canDeleteScenario(row)) {
+        ElMessage.warning('仅创建人或管理员可以删除')
+        return
+    }
     try {
         await ElMessageBox.confirm(`确定删除场景 "${row.name}"?`, '警告', {
             type: 'warning',
@@ -215,10 +223,20 @@ const handleDelete = async (row) => {
         ElMessage.success('删除成功')
         fetchScenarios()
     } catch (err) {
-        if (err !== 'cancel') ElMessage.error('删除失败')
+        if (err !== 'cancel') ElMessage.error('删除失败: ' + summarizeHttpDetail(err))
     } finally {
         loading.value = false
     }
+}
+
+const canDeleteScenario = (row) => {
+    if (!row) return false
+    if (isAdmin.value) return true
+    return row.user_id !== null && row.user_id !== undefined && row.user_id === currentUser.value.id
+}
+
+const deletePermissionTip = (row) => {
+    return canDeleteScenario(row) ? '删除' : '仅创建人或管理员可以删除'
 }
 
 /** 状态标签类型映射 */
@@ -422,7 +440,15 @@ onActivated(() => {
                                     <template #dropdown>
                                       <el-dropdown-menu>
                                         <el-dropdown-item @click="handleReport(item)">查看报告</el-dropdown-item>
-                                        <el-dropdown-item divided style="color: #F56C6C" @click="handleDelete(item)">删除</el-dropdown-item>
+                                        <el-dropdown-item
+                                            divided
+                                            :disabled="!canDeleteScenario(item)"
+                                            :style="{ color: canDeleteScenario(item) ? '#F56C6C' : '#C0C4CC' }"
+                                            :title="deletePermissionTip(item)"
+                                            @click="handleDelete(item)"
+                                        >
+                                            删除
+                                        </el-dropdown-item>
                                       </el-dropdown-menu>
                                     </template>
                                   </el-dropdown>

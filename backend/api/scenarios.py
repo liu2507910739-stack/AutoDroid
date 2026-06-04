@@ -797,11 +797,16 @@ def update_scenario(
     return db_scenario
 
 @router.delete("/{scenario_id}")
-def delete_scenario(scenario_id: int, session: Session = Depends(get_session)):
+def delete_scenario(
+    scenario_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(deps.get_current_user),
+):
     """Delete a scenario"""
     scenario = session.get(TestScenario, scenario_id)
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
+    deps.ensure_owner_or_admin(scenario.user_id, current_user)
     
     # Cascade delete steps
     steps = session.exec(select(ScenarioStep).where(ScenarioStep.scenario_id == scenario_id)).all()

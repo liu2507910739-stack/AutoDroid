@@ -866,11 +866,16 @@ def precheck_test_case(
 
 
 @router.delete("/{case_id}")
-def delete_test_case(case_id: int, session: Session = Depends(get_session)):
+def delete_test_case(
+    case_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(deps.get_current_user),
+):
     """Delete a test case."""
     case = session.get(TestCase, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
+    deps.ensure_owner_or_admin(case.user_id, current_user)
 
     standard_steps = session.exec(select(TestCaseStep).where(TestCaseStep.case_id == case_id)).all()
     previous_image_paths = _collect_case_template_image_paths(case, standard_steps)
