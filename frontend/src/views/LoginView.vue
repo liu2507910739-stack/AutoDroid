@@ -394,6 +394,8 @@ onMounted(loadRegistrationStatus)
   min-height: calc(100dvh - 32px);
   max-width: none;
   padding: 0;
+  background-color: transparent;
+  flex: none;
 }
 
 .split-container.is-mobile-mode .mode-switch-wrap {
@@ -456,6 +458,8 @@ onMounted(loadRegistrationStatus)
     min-height: calc(100dvh - 32px);
     max-width: none;
     padding: 0;
+    background-color: transparent;
+    flex: none;
   }
 
   .mode-switch-wrap {
